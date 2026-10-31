@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#00685F" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>SAATHI — Interactive 3D demo film</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <div id="stage">
+      <canvas id="gl"></canvas>
+      <canvas id="overlay"></canvas>
+      <div id="hotspots"></div>
+    </div>
+
+    <header id="topbar" class="ui">
+      <div class="brand"><img id="brandMark" alt="" /><span>SAATHI</span><em>interactive demo</em></div>
+      <div class="actions">
+        <button id="btnSound" class="chipbtn" title="Music" style="display:none">♪ <span>Music on</span></button>
+        <button id="btnFull" class="chipbtn" title="Toggle fullscreen">⛶ <span>Fullscreen</span></button>
+        <button id="btnExplore" class="chipbtn" title="Free 3D camera">⟲ <span>Explore 3D</span></button>
+        <button id="btnRecord" class="chipbtn rec" title="Record the full film as a video file">● <span>Record video</span></button>
+      </div>
+    </header>
+
+    <div id="honesty" class="hidden">Prototype build · simulated sensor &amp; AI · demo data · screening support, not a diagnosis</div>
+
+    <div id="pod">
+      <div class="podcard">
+        <b>THE POD WE BUILT</b>
+        <div class="podrow"><img id="podImg1" alt="Pod strapped below the knee" /><img id="podImg2" alt="Strap with sensor board" /><img id="podImg3" alt="Pod in hand" /></div>
+        <small>Strap-on tibial node · IMU + OLED readout · perfboard prototype, neoprene strap</small>
+      </div>
+    </div>
+
+    <footer id="bottombar" class="ui">
+      <button id="btnPlay" class="play" aria-label="Play / pause">❚❚</button>
+      <div id="chapters"></div>
+      <span id="time">0:00</span>
+    </footer>
+
+    <div id="hint" class="hidden">Drag to orbit · scroll to zoom · click a marker to jump · <b>Resume film</b> with ▶</div>
+    <div id="recBadge" class="hidden"><i></i> REC <span id="recTime">0:00</span> — keep this tab visible</div>
+
+    <div id="start">
+      <div class="card">
+        <img id="startLogo" alt="SAATHI logo" />
+        <h1>SAATHI in the hills</h1>
+        <p>A 2-minute interactive 3D film, silent by design (add your own voice-over in editing): camera ROM → posture → tibial-shock pod → PHC dashboard. Goes fullscreen on play.</p>
+        <div class="row">
+          <button id="btnStart" class="primary">▶ Play film</button>
+          <button id="btnStartExplore" class="ghost">Explore the valley</button>
+        </div>
+        <small>Tip: drag anytime to look around · chapters at the bottom</small>
+      </div>
+    </div>
+
+    <div id="fatal" class="hidden">
+      <div class="card">
+        <h2>3D view unavailable</h2>
+        <p></p>
+        <small>If this keeps happening, open the link in Chrome or Edge with hardware acceleration enabled.</small>
+      </div>
+    </div>
+
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>
