@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+<meta name="theme-color" content="#101820"/>
+<title>HygroScope — Interactive 3D Demo Film · Team Zypher</title>
+<style>
+:root{--ink:#0B2E2B;--plum:#79566F;--accent:#B995AD;--cream:#F7EDE5;--navy:#493344;--muted:#806C7B;
+--border:#E6D5DC;--lav:#E8DADB;--mint:#4A8B71;--warn:#B86B35;--crit:#C84661;--gold:#F2C14E}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:#0d141b;color:#e8eef2;font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;-webkit-font-smoothing:antialiased;overflow:hidden}
+button{font:inherit;cursor:pointer;border:none;background:none;color:inherit}
+#gl,#ov{position:absolute;inset:0}
+#ov{pointer-events:none;z-index:4}
+
+/* ---------- LANDING ---------- */
+#app{height:100%;display:flex;align-items:center;justify-content:center;padding:24px;overflow:auto;
+ background:radial-gradient(1000px 600px at 20% -10%,rgba(185,149,173,.16) 0,transparent 60%),
+ radial-gradient(900px 560px at 90% 110%,rgba(242,193,78,.10) 0,transparent 55%),#0d141b}
+.hero{max-width:920px;width:100%;text-align:center}
+.crest{width:118px;height:118px;object-fit:contain;filter:drop-shadow(0 12px 30px rgba(0,0,0,.5));animation:bob 5s ease-in-out infinite}
+@keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+.teamline{margin-top:10px;font-size:11px;letter-spacing:.3em;text-transform:uppercase;color:var(--gold);font-weight:800}
+h1{font-size:clamp(34px,6vw,64px);line-height:1.05;letter-spacing:-.02em;font-weight:900;margin:12px 0 10px;color:#fff}
+h1 .a{color:var(--accent)}
+.sub{color:#9fb3bd;font-size:clamp(14px,1.6vw,17px);line-height:1.6;max-width:680px;margin:0 auto}
+.cta{margin-top:26px;display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
+.btn-primary{min-height:54px;padding:0 32px;border-radius:14px;background:var(--accent);color:#fff;font-weight:700;font-size:15px;display:inline-flex;align-items:center;gap:10px;box-shadow:0 12px 30px -8px rgba(185,149,173,.5);transition:.2s}
+.btn-primary:hover{background:var(--plum);transform:translateY(-2px)}
+.btn-ghost{min-height:54px;padding:0 26px;border-radius:14px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.05);font-weight:600;font-size:15px;transition:.2s}
+.btn-ghost:hover{background:rgba(255,255,255,.1)}
+.opts{margin-top:20px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+.chip{border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.05);border-radius:999px;padding:8px 16px;font-size:12px;font-weight:600;color:#9fb3bd;display:inline-flex;align-items:center;gap:8px}
+.chip[aria-pressed="true"]{background:var(--accent);color:#fff;border-color:var(--accent)}
+.chip .sw{width:8px;height:8px;border-radius:50%;background:currentColor;opacity:.7}
+#sceneChips{margin-top:20px;display:flex;gap:7px;justify-content:center;flex-wrap:wrap}
+.sp{font-size:10.5px;font-weight:600;color:#8fa3ad;border:1px dashed rgba(255,255,255,.2);border-radius:999px;padding:5px 11px}
+.fineprint{margin-top:18px;font-size:11px;color:#7d919b}
+
+/* ---------- FILM SHELL ---------- */
+#film{position:fixed;inset:0;background:#0d141b;display:none;overflow:hidden}
+#film.on{display:block}
+.vignette{position:absolute;inset:0;pointer-events:none;z-index:5;background:radial-gradient(120% 92% at 50% 42%,transparent 55%,rgba(0,0,0,.6) 100%)}
+#lower{position:absolute;left:5vw;bottom:116px;z-index:6;pointer-events:none;max-width:600px}
+#lower .bar{width:46px;height:4px;border-radius:2px;background:var(--gold);margin-bottom:10px}
+#lower .t{color:#fff;font-size:clamp(19px,2.6vw,30px);font-weight:800;letter-spacing:-.01em;text-shadow:0 2px 18px rgba(0,0,0,.6)}
+#lower .s{color:rgba(255,255,255,.85);font-size:clamp(12px,1.5vw,16px);font-weight:600;margin-top:5px;text-shadow:0 2px 12px rgba(0,0,0,.5)}
+#lower.hide{display:none}
+#chap{position:absolute;top:22px;left:0;right:0;text-align:center;z-index:6;pointer-events:none}
+#chap .k{font-size:10px;letter-spacing:.26em;text-transform:uppercase;color:var(--gold);font-weight:800}
+#chap .t{font-size:clamp(15px,2vw,22px);font-weight:800;color:#fff;margin-top:5px;text-shadow:0 2px 16px rgba(0,0,0,.55)}
+.cite{position:absolute;top:86px;left:0;right:0;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;z-index:6;pointer-events:none}
+.cite span{font-size:10px;font-weight:600;color:rgba(255,255,255,.8);background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.18);border-radius:999px;padding:4px 10px;backdrop-filter:blur(6px)}
+#subs{position:absolute;left:0;right:0;bottom:100px;display:flex;justify-content:center;z-index:6;pointer-events:none;padding:0 24px}
+#subs .line{max-width:860px;background:rgba(8,10,12,.74);backdrop-filter:blur(8px);color:#fff;border:1px solid rgba(255,255,255,.14);border-radius:14px;padding:11px 20px;font-size:clamp(14px,1.7vw,19px);line-height:1.5;text-align:center;font-weight:500}
+#subs.hidden{display:none}
+#wm{position:absolute;top:18px;right:20px;z-index:6;display:flex;align-items:center;gap:9px;pointer-events:none;opacity:.92}
+#wm img{width:38px;height:38px;object-fit:contain;filter:drop-shadow(0 4px 10px rgba(0,0,0,.5))}
+#wm b{font-size:12px;color:#fff;letter-spacing:.02em}
+#wm small{display:block;font-size:8px;letter-spacing:.22em;color:var(--gold);font-weight:800}
+/* start / end cards */
+#card{position:absolute;inset:0;z-index:8;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:rgba(8,10,12,.55);backdrop-filter:blur(3px);transition:opacity .8s;pointer-events:none}
+#card.off{opacity:0}
+#card img{width:170px;height:170px;object-fit:contain;filter:drop-shadow(0 18px 40px rgba(0,0,0,.6))}
+#card .n{font-size:clamp(30px,5vw,54px);font-weight:900;color:#fff;letter-spacing:-.02em}
+#card .g{font-size:12px;letter-spacing:.34em;text-transform:uppercase;color:var(--gold);font-weight:800}
+#card .tag{font-size:clamp(13px,1.6vw,17px);color:rgba(255,255,255,.85);font-weight:600}
+/* HUD */
+#hud{position:absolute;left:0;right:0;bottom:0;height:92px;display:flex;align-items:center;gap:12px;padding:0 18px;z-index:7;
+ background:linear-gradient(to top,rgba(6,8,10,.94),rgba(6,8,10,.5) 70%,transparent)}
+.grp{display:flex;align-items:center;gap:8px}
+.hbtn{width:42px;height:42px;border-radius:12px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.16);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:15px;transition:.15s}
+.hbtn:hover{background:rgba(255,255,255,.2)}
+.hbtn.primary{background:var(--accent);border-color:var(--accent);width:50px;height:50px}
+#progress{flex:1;height:6px;border-radius:999px;background:rgba(255,255,255,.16);position:relative;cursor:pointer}
+#progress .fill{position:absolute;inset:0 auto 0 0;width:0%;background:linear-gradient(90deg,var(--gold),var(--accent));border-radius:999px}
+#meta{color:rgba(255,255,255,.85);font-size:11px;font-weight:700;min-width:126px;text-align:right}
+#dots{display:flex;gap:5px;flex-wrap:wrap;max-width:330px;justify-content:center}
+#dots i{width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,.26);cursor:pointer;transition:.2s}
+#dots i.done{background:var(--gold)}
+#dots i.cur{background:#fff;transform:scale(1.4)}
+/* 2D overlay panels (abstract chapters) */
+#panels{position:absolute;inset:0 0 92px 0;z-index:3;display:flex;align-items:center;justify-content:center;pointer-events:none}
+.steps{display:flex;gap:14px}
+.step{width:158px;background:rgba(10,14,18,.62);border:1px solid rgba(255,255,255,.16);border-radius:16px;padding:14px;color:#fff;opacity:.26;transform:translateY(12px);transition:.5s;backdrop-filter:blur(6px)}
+.step.on{opacity:1;transform:none;background:rgba(185,149,173,.2);border-color:var(--accent);box-shadow:0 0 30px rgba(185,149,173,.3)}
+.step .n{font-size:10px;font-weight:800;color:var(--gold);letter-spacing:.14em}
+.step .h{font-size:13px;font-weight:800;margin:6px 0 4px}
+.step .d{font-size:10px;line-height:1.45;color:rgba(255,255,255,.75)}
+.spec{width:min(70vw,760px);height:46%;background:rgba(10,14,18,.66);border:1px solid rgba(255,255,255,.16);border-radius:16px;padding:16px;position:relative;backdrop-filter:blur(6px)}
+.bars{position:absolute;left:16px;right:16px;bottom:35px;top:34px;display:flex;align-items:flex-end;gap:3px}
+.bars i{flex:1;background:linear-gradient(to top,var(--plum),var(--accent));border-radius:3px 3px 0 0;transform-origin:bottom;animation:bar 1.6s ease-in-out infinite alternate}
+@keyframes bar{from{transform:scaleY(.55)}to{transform:scaleY(1)}}
+.peak{position:absolute;bottom:35px;width:4px;background:var(--gold);box-shadow:0 0 16px var(--gold);border-radius:2px;animation:peakgrow 1.4s ease forwards;transform-origin:bottom}
+@keyframes peakgrow{from{height:0}to{height:76%}}
+.rays{display:flex;gap:36px}
+.raybox{width:min(34vw,340px);background:rgba(10,14,18,.62);border:1px solid rgba(255,255,255,.16);border-radius:16px;padding:16px;color:#fff;backdrop-filter:blur(6px)}
+.raybox h4{font-size:13px;font-weight:800;margin-bottom:4px}
+.raybox p{font-size:10px;color:rgba(255,255,255,.72);line-height:1.45}
+.raybox .diagram{height:130px;margin-top:10px;position:relative;border-radius:10px;overflow:hidden;background:linear-gradient(160deg,#b7a08e,#8f7663)}
+.ray{position:absolute;height:3px;border-radius:2px;transform-origin:left center}
+.ray.in{background:#ffe9a8;left:8%;top:18%;width:52%;transform:rotate(28deg);box-shadow:0 0 10px #ffe9a8}
+.ray.out{background:var(--gold);left:56%;top:44%;width:46%;transform:rotate(-28deg);box-shadow:0 0 12px var(--gold);animation:shoot 1.8s ease-in-out infinite}
+@keyframes shoot{0%{opacity:.2;transform:rotate(-28deg) scaleX(.2)}60%{opacity:1;transform:rotate(-28deg) scaleX(1)}100%{opacity:.2;transform:rotate(-28deg) scaleX(1)}}
+.scatter{position:absolute;left:56%;top:44%;width:6px;height:6px;border-radius:50%;background:#ffe9a8;animation:sc 1.6s ease-out infinite}
+@keyframes sc{0%{opacity:1;transform:translate(0,0)}100%{opacity:0;transform:translate(var(--dx),var(--dy)) scale(.4)}}
+.stat{display:flex;justify-content:space-between;font-size:10px;margin-top:8px;color:rgba(255,255,255,.85)}
+.stat b{color:var(--gold)}
+.dew{width:min(64vw,620px);background:rgba(10,14,18,.66);border:1px solid rgba(255,255,255,.16);border-radius:16px;padding:20px;color:#fff;backdrop-filter:blur(6px)}
+.gauge{position:relative;height:58px;border-radius:12px;background:linear-gradient(90deg,#4A8B71,#B86B35 62%,#C84661);margin-top:12px}
+.gauge .mark{position:absolute;top:-6px;bottom:-6px;width:3px;background:#fff;box-shadow:0 0 12px #fff}
+.gauge .mark.dewp{background:#8fd3ff;box-shadow:0 0 12px #8fd3ff;animation:close 4s ease-in-out infinite alternate}
+@keyframes close{from{left:40%}to{left:70%}}
+.gauge .mark.temp{left:74%}
+.k{background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.15);border-radius:12px;padding:9px}
+.k .l{font-size:8px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:rgba(255,255,255,.7)}
+.k .v{font-size:19px;font-weight:900;color:#fff}
+.k.red .v{color:#f3b6c2}
+.formula{margin-top:14px;font-size:12px;color:rgba(255,255,255,.85);background:rgba(0,0,0,.3);border-radius:10px;padding:10px 12px;font-family:ui-monospace,Menlo,Consolas,monospace}
+.vgrid{display:flex;gap:16px}
+.vcard{width:250px;background:rgba(10,14,18,.66);border:1px solid rgba(255,255,255,.16);border-radius:18px;padding:18px;color:#fff;backdrop-filter:blur(6px)}
+.vcard .tag{font-size:9px;font-weight:800;letter-spacing:.16em;color:var(--gold)}
+.vcard h4{font-size:15px;font-weight:800;margin:8px 0 6px}
+.vcard p{font-size:10.5px;line-height:1.55;color:rgba(255,255,255,.75)}
+.vcard .src{margin-top:10px;font-size:9.5px;color:#9fe8c9;background:rgba(74,139,113,.16);border:1px solid rgba(74,139,113,.4);border-radius:8px;padding:6px 8px}
+.fuse{display:flex;align-items:center;gap:20px}
+.chan{width:148px;background:rgba(10,14,18,.66);border:1px solid rgba(255,255,255,.16);border-radius:16px;padding:14px;color:#fff;text-align:center;backdrop-filter:blur(6px)}
+.chan .ic{font-size:22px}.chan .h{font-size:12px;font-weight:800;margin-top:6px}.chan .d{font-size:9px;color:rgba(255,255,255,.7);margin-top:3px}
+.arrow{color:var(--gold);font-size:26px;animation:nudge 1.4s ease-in-out infinite}
+@keyframes nudge{0%,100%{transform:translateX(0)}50%{transform:translateX(8px)}}
+.score{width:186px;background:linear-gradient(160deg,var(--plum),#5b4055);border-radius:20px;padding:20px;color:#fff;text-align:center;box-shadow:0 0 50px rgba(185,149,173,.4)}
+.score .v{font-size:46px;font-weight:900;letter-spacing:-.03em}
+.score .l{font-size:10px;letter-spacing:.18em;text-transform:uppercase;opacity:.85;font-weight:700}
+.flow{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:center;margin-top:18px}
+.fstep{font-size:9px;font-weight:800;border-radius:999px;padding:6px 10px;background:rgba(255,255,255,.9);color:#493344}
+.fstep.done{background:var(--mint);color:#fff}
+.fstep.cur{background:var(--accent);color:#fff;animation:pulse 1.6s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.55}}
+.farrow{color:rgba(255,255,255,.6);font-size:10px}
+.arch{display:flex;align-items:stretch;gap:16px}
+.acol{display:flex;flex-direction:column;gap:10px;justify-content:center}
+.abox{background:rgba(10,14,18,.66);border:1px solid rgba(255,255,255,.16);border-radius:14px;padding:12px 16px;color:#fff;text-align:center;min-width:168px;backdrop-filter:blur(6px)}
+.abox b{display:block;font-size:12px;font-weight:800}
+.abox span{font-size:9px;color:rgba(255,255,255,.65)}
+.abox.hot{background:linear-gradient(160deg,var(--plum),#5b4055);border-color:var(--accent);box-shadow:0 0 40px rgba(185,149,173,.35)}
+.aarrow{align-self:center;color:var(--gold);font-size:24px;animation:nudge 1.4s ease-in-out infinite}
+.impact{display:flex;gap:26px}
+.istat{text-align:center;color:#fff}
+.istat .v{font-size:clamp(34px,5vw,58px);font-weight:900;letter-spacing:-.03em}
+.istat .v em{font-style:normal;color:var(--gold)}
+.istat .l{font-size:11px;font-weight:700;color:rgba(255,255,255,.75);margin-top:4px;max-width:170px}
+.refs{position:absolute;left:50%;bottom:4%;transform:translateX(-50%);width:min(84vw,920px);color:rgba(255,255,255,.8);font-size:10px;line-height:1.7;text-align:center;z-index:6;pointer-events:none}
+.refs b{color:#fff}
+</style>
+</head>
+<body>
+
+<div id="app">
+  <div class="hero">
+    <img class="crest" id="crestLanding" alt="Team Zypher crest"/>
+    <div class="teamline">Team Zypher · 2026</div>
+    <h1>Hygro<span class="a">Scope</span></h1>
+    <p class="sub">A real-time 3D demo film: dusk on a Greater Manchester estate, six apartment blocks,
+      one field inspector — and the physics-grade inspection pipeline that sees water before it becomes damage.</p>
+    <div class="cta">
+      <button class="btn-primary" id="startBtn">▶&nbsp; Start Film (Fullscreen + Voice-over)</button>
+      <button class="btn-ghost" id="silentBtn">Watch without voice</button>
+    </div>
+    <div class="opts">
+      <button class="chip" id="tgSubs" aria-pressed="true"><span class="sw"></span>Subtitles</button>
+      <button class="chip" id="tgVoice" aria-pressed="true"><span class="sw"></span>Voice-over</button>
+      <button class="chip" id="tgScore" aria-pressed="true"><span class="sw"></span>Ambient score</button>
+    </div>
+    <div id="sceneChips"></div>
+    <p class="fineprint">16 chapters · WebGL estate rendered live in your browser · single offline HTML file ·
+      <b>Space</b> pause · <b>←/→</b> chapters · <b>Esc</b> exit fullscreen</p>
+  </div>
+</div>
+
+<div id="film">
+  <canvas id="gl"></canvas>
+  <canvas id="ov"></canvas>
+  <div id="panels"></div>
+  <div class="vignette"></div>
+  <div id="wm"><img id="wmLogo" alt=""/><div><b>HygroScope</b><small>TEAM ZYPHER</small></div></div>
+  <div id="chap"><div class="k" id="cKick"></div><div class="t" id="cTitle"></div></div>
+  <div class="cite" id="cCite"></div>
+  <div id="lower" class="hide"><div class="bar"></div><div class="t" id="loT"></div><div class="s" id="loS"></div></div>
+  <div id="subs"><div class="line" id="subLine"></div></div>
+  <div id="card" class="off"><img id="cardLogo" alt=""/><div class="g" id="cardG"></div><div class="n" id="cardN"></div><div class="tag" id="cardTag"></div></div>
+  <div id="hud">
+    <div class="grp">
+      <button class="hbtn" id="btnExit" title="Exit">✕</button>
+      <button class="hbtn" id="btnPrev" title="Previous">⏮</button>
+      <button class="hbtn primary" id="btnPlay" title="Play/pause">⏸</button>
+      <button class="hbtn" id="btnNext" title="Next">⏭</button>
+    </div>
+    <div id="dots"></div>
+    <div id="progress"><div class="fill" id="pfill"></div></div>
+    <div class="grp">
+      <button class="hbtn" id="btnSubs" title="Subtitles">CC</button>
+      <button class="hbtn" id="btnVoice" title="Voice">🔊</button>
+      <button class="hbtn" id="btnScore" title="Score">♪</button>
+      <div id="meta">Ch 1 / 16</div>
+    </div>
+  </div>
+</div>
+
+<script>/*__THREE__*/</script>
+<script>
+var AUDIO_MANIFEST = __AUDIO_MANIFEST__;
+var LOGO_B64 = "__LOGO_B64__";
+var logoImg = new Image(); logoImg.src = LOGO_B64;
+document.getElementById('crestLanding').src = LOGO_B64;
+document.getElementById('wmLogo').src = LOGO_B64;
+document.getElementById('cardLogo').src = LOGO_B64;
+
+/* =====================================================================
+   THREE.JS ESTATE — dusk, rain, six apartment blocks, one inspector
+   ===================================================================== */
+var renderer, scene, camera, ovCtx, glCanvas, ovCanvas;
+var rain, rainGeo, torch, torchOn = 0, phoneScreenTex, phoneScreenCtx, dashTex, dashCtx;
+var inspector, phoneGroup, dashBoard;
+var camPos = new THREE.Vector3(-26,16,-34), camTgt = new THREE.Vector3(0,10,0);
+var wantPos = camPos.clone(), wantTgt = camTgt.clone();
+var clock = new THREE.Clock();
+
+function facadeTexture(opts){
+  var c = document.createElement('canvas'); c.width = 512; c.height = 512;
+  var x = c.getContext('2d');
+  x.fillStyle = opts.base; x.fillRect(0,0,512,512);
+  // brick courses
+  x.strokeStyle = 'rgba(0,0,0,0.08)'; x.lineWidth = 1;
+  for (var y=0;y<512;y+=16){ x.beginPath(); x.moveTo(0,y); x.lineTo(512,y); x.stroke(); }
+  // windows 6 cols x 8 rows
+  for (var r=0;r<8;r++) for (var q=0;q<6;q++){
+    var wx = 26+q*80, wy = 22+r*60;
+    x.fillStyle = '#1b2733'; x.fillRect(wx,wy,52,40);
+    x.fillStyle = 'rgba(255,255,255,0.10)'; x.fillRect(wx,wy,52,6);
+    if (opts.lit && Math.random()<opts.lit){ x.fillStyle='rgba(255,214,140,0.85)'; x.fillRect(wx+3,wy+3,46,34); }
+  }
+  // damp staining on hero facade
+  if (opts.damp){
+    var g = x.createRadialGradient(300,360,10,300,360,190);
+    g.addColorStop(0,'rgba(38,52,66,0.85)'); g.addColorStop(0.55,'rgba(52,64,74,0.45)'); g.addColorStop(1,'rgba(0,0,0,0)');
+    x.fillStyle = g; x.fillRect(0,0,512,512);
+    x.strokeStyle='rgba(30,42,54,0.5)'; x.lineWidth=10;
+    x.beginPath(); x.moveTo(290,120); x.lineTo(285,300); x.stroke();
+    x.beginPath(); x.moveTo(330,150); x.lineTo(338,320); x.stroke();
+  }
+  var t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+function buildBlock(px,pz,w,h,d,opts){
+  var tex = facadeTexture(opts);
+  var mat = new THREE.MeshStandardMaterial({map:tex, roughness:0.92, metalness:0.02});
+  var roof = new THREE.MeshStandardMaterial({color:0x2a333c, roughness:0.95});
+  var m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), [mat,mat,roof,roof,mat,mat]);
+  m.position.set(px,h/2,pz); scene.add(m);
+  // parapet + roof box
+  var p = new THREE.Mesh(new THREE.BoxGeometry(w*0.94,1.2,d*0.94), roof); p.position.set(px,h+0.6,pz); scene.add(p);
+  var rb = new THREE.Mesh(new THREE.BoxGeometry(w*0.3,2.4,d*0.3), roof); rb.position.set(px-w*0.2,h+1.8,pz); scene.add(rb);
+  return m;
+}
+function initWorld(){
+  glCanvas = document.getElementById('gl'); ovCanvas = document.getElementById('ov');
+  renderer = new THREE.WebGLRenderer({canvas:glCanvas, antialias:true});
+  renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+  renderer.shadowMap.enabled = false;
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x141a24);
+  scene.fog = new THREE.Fog(0x141a24, 34, 130);
+  camera = new THREE.PerspectiveCamera(46, 1, 0.1, 400);
+  camera.position.copy(camPos);
+
+  scene.add(new THREE.HemisphereLight(0x3a4a63, 0x1a1410, 0.85));
+  var moon = new THREE.DirectionalLight(0xbfd0e6, 0.5); moon.position.set(-30,40,-20); scene.add(moon);
+
+  // wet asphalt
+  var ground = new THREE.Mesh(new THREE.PlaneGeometry(220,260),
+    new THREE.MeshStandardMaterial({color:0x171c22, roughness:0.35, metalness:0.25}));
+  ground.rotation.x = -Math.PI/2; scene.add(ground);
+  // pavement strips
+  var pav = new THREE.Mesh(new THREE.PlaneGeometry(8,260), new THREE.MeshStandardMaterial({color:0x232a32, roughness:0.8}));
+  pav.rotation.x=-Math.PI/2; pav.position.set(6,0.02,0); scene.add(pav);
+
+  // six big apartment blocks
+  buildBlock( 16,  0, 12, 26, 20, {base:'#8a6f5e', lit:0.30, damp:true});   // hero block
+  buildBlock( 16,-30, 12, 22, 20, {base:'#7d685c', lit:0.22});
+  buildBlock( 16, 30, 12, 30, 20, {base:'#93786a', lit:0.26});
+  buildBlock(-16,-14, 12, 24, 22, {base:'#6f5f57', lit:0.20});
+  buildBlock(-16, 16, 12, 28, 22, {base:'#8a7466', lit:0.28});
+  buildBlock(-16, 46, 12, 20, 22, {base:'#7a6a60', lit:0.18});
+
+  // street lamps
+  [[0,-10],[0,10],[0,30]].forEach(function(p){
+    var pole = new THREE.Mesh(new THREE.CylinderGeometry(0.12,0.16,6,8), new THREE.MeshStandardMaterial({color:0x2c333b,roughness:0.6}));
+    pole.position.set(p[0],3,p[1]); scene.add(pole);
+    var head = new THREE.Mesh(new THREE.SphereGeometry(0.34,12,12), new THREE.MeshBasicMaterial({color:0xffd9a0}));
+    head.position.set(p[0],6.1,p[1]); scene.add(head);
+    var L = new THREE.PointLight(0xffc98a, 90, 30, 2); L.position.set(p[0],6,p[1]); scene.add(L);
+  });
+
+  // rain
+  var N = 1600, pos = new Float32Array(N*3);
+  for (var i=0;i<N;i++){ pos[i*3]=(Math.random()-0.5)*70; pos[i*3+1]=Math.random()*34; pos[i*3+2]=(Math.random()-0.5)*110; }
+  rainGeo = new THREE.BufferGeometry();
+  rainGeo.setAttribute('position', new THREE.BufferAttribute(pos,3));
+  rain = new THREE.Points(rainGeo, new THREE.PointsMaterial({color:0x9fb6cc, size:0.06, transparent:true, opacity:0.55}));
+  scene.add(rain);
+
+  // torch (flash) spotlight from phone to hero wall
+  torch = new THREE.SpotLight(0xfff2d0, 0, 22, Math.PI/7, 0.45, 1.6);
+  torch.position.set(6.6,1.5,0.2); scene.add(torch);
+  torch.target.position.set(10,1.6,0); scene.add(torch.target);
+
+  buildInspector();
+  buildPhone();
+  buildDashBoard();
+
+  ovCtx = ovCanvas.getContext('2d');
+  resize();
+  window.addEventListener('resize', resize);
+}
+function buildInspector(){
+  inspector = new THREE.Group();
+  var hiVis = new THREE.MeshStandardMaterial({color:0x4A8B71, roughness:0.7});
+  var dark  = new THREE.MeshStandardMaterial({color:0x232a33, roughness:0.8});
+  var skin  = new THREE.MeshStandardMaterial({color:0xc99b78, roughness:0.7});
+  var legs = new THREE.Mesh(new THREE.CylinderGeometry(0.16,0.14,0.95,10), dark); legs.position.y=0.48; inspector.add(legs);
+  var torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.28,0.62,6,12), hiVis); torso.position.y=1.28; inspector.add(torso);
+  var stripe = new THREE.Mesh(new THREE.CylinderGeometry(0.29,0.29,0.09,12), new THREE.MeshBasicMaterial({color:0xe8f2ec})); stripe.position.y=1.34; inspector.add(stripe);
+  var head = new THREE.Mesh(new THREE.SphereGeometry(0.21,16,16), skin); head.position.y=1.86; inspector.add(head);
+  var helm = new THREE.Mesh(new THREE.SphereGeometry(0.235,16,10,0,Math.PI*2,0,Math.PI/2), new THREE.MeshStandardMaterial({color:0xF2C14E,roughness:0.5})); helm.position.y=1.9; inspector.add(helm);
+  var arm = new THREE.Mesh(new THREE.CapsuleGeometry(0.09,0.5,4,8), hiVis);
+  arm.position.set(0.3,1.35,0.18); arm.rotation.z=-1.15; arm.rotation.y=0.4; inspector.add(arm);
+  inspector.position.set(6,0,0); inspector.rotation.y = Math.PI/2; // face +x toward hero wall
+  scene.add(inspector);
+}
+function buildPhone(){
+  phoneGroup = new THREE.Group();
+  var body = new THREE.Mesh(new THREE.BoxGeometry(0.09,0.42,0.2), new THREE.MeshStandardMaterial({color:0x11151a,roughness:0.4,metalness:0.4}));
+  phoneGroup.add(body);
+  var c = document.createElement('canvas'); c.width=256; c.height=512; phoneScreenCtx=c.getContext('2d');
+  phoneScreenTex = new THREE.CanvasTexture(c); phoneScreenTex.colorSpace = THREE.SRGBColorSpace;
+  var scr = new THREE.Mesh(new THREE.PlaneGeometry(0.075,0.38), new THREE.MeshBasicMaterial({map:phoneScreenTex}));
+  scr.rotation.y = Math.PI/2; scr.position.set(0.048,0,0);
+  phoneGroup.add(scr);
+  phoneGroup.position.set(6.62,1.45,0.18);
+  phoneGroup.rotation.y = -0.5;
+  scene.add(phoneGroup);
+}
+function buildDashBoard(){
+  var c = document.createElement('canvas'); c.width=1024; c.height=576; dashCtx=c.getContext('2d');
+  dashTex = new THREE.CanvasTexture(c); dashTex.colorSpace = THREE.SRGBColorSpace;
+  dashBoard = new THREE.Mesh(new THREE.PlaneGeometry(15,8.44),
+    new THREE.MeshBasicMaterial({map:dashTex, transparent:true, opacity:0}));
+  dashBoard.position.set(0,4.4,10); scene.add(dashBoard);
+  drawDash();
+}
+/* ---- phone screen painter ---- */
+function drawPhoneScreen(mode){
+  var x = phoneScreenCtx, W=256, H=512;
+  x.fillStyle='#F7EDE5'; x.fillRect(0,0,W,H);
+  x.fillStyle='#493344'; x.font='700 11px Inter,sans-serif'; x.textAlign='left';
+  x.fillStyle='#111'; x.font='700 10px Inter,sans-serif'; x.fillText('9:41',14,18);
+  x.textAlign='right'; x.fillText('▂▄▆ ⛁ 🔋',W-12,18); x.textAlign='left';
+  if (logoImg.complete && logoImg.naturalWidth) { try{ x.drawImage(logoImg, W-40, 26, 26, 26);}catch(e){} }
+  x.fillStyle='#79566F'; x.fillRect(0,26,W-46,44);
+  x.fillStyle='#fff'; x.font='800 15px Inter,sans-serif'; x.fillText('HygroScope',12,54);
+  var title={signin:'Sign in',dash:'Dashboard',optical:'Optical capture',acoustic:'Acoustic capture',heat:'Analysis',wo:'Work order'}[mode]||'HygroScope';
+  x.font='700 9px Inter,sans-serif'; x.fillStyle='rgba(255,255,255,.85)'; x.textAlign='right'; x.fillText(title,W-50,54); x.textAlign='left';
+  var y=86;
+  function card(lbl,val,acc,h){ h=h||64; x.fillStyle='#fff'; x.strokeStyle='#E6D5DC'; x.lineWidth=1.5;
+    rr(x,12,y,W-24,h,12); x.fill(); x.stroke();
+    x.fillStyle='#806C7B'; x.font='800 8px Inter,sans-serif'; x.fillText(lbl.toUpperCase(),22,y+18);
+    x.fillStyle=acc?'#B995AD':'#493344'; x.font='900 20px Inter,sans-serif'; x.fillText(val,22,y+44); y+=h+10; }
+  function rr(ctx,a,b,w,h,r){ctx.beginPath();ctx.moveTo(a+r,b);ctx.arcTo(a+w,b,a+w,b+h,r);ctx.arcTo(a+w,b+h,a,b+h,r);ctx.arcTo(a,b+h,a,b,r);ctx.arcTo(a,b,a+w,b,r);ctx.closePath();}
+  if (mode==='signin'){
+    x.fillStyle='#806C7B'; x.font='800 8px Inter,sans-serif'; x.fillText('EMAIL',14,y+10);
+    x.fillStyle='#fff'; rr(x,12,y+16,W-24,34,10); x.fill(); x.strokeStyle='#E6D5DC'; x.stroke();
+    x.fillStyle='#493344'; x.font='600 11px Inter,sans-serif'; x.fillText('inspector@hygroscope.uk',22,y+38); y+=62;
+    x.fillStyle='#806C7B'; x.font='800 8px Inter,sans-serif'; x.fillText('PASSWORD',14,y+10);
+    x.fillStyle='#fff'; rr(x,12,y+16,W-24,34,10); x.fill(); x.stroke();
+    x.fillStyle='#493344'; x.fillText('••••••••••',22,y+38); y+=66;
+    x.fillStyle='#B995AD'; rr(x,12,y,W-24,44,12); x.fill();
+    x.fillStyle='#fff'; x.font='800 13px Inter,sans-serif'; x.fillText('Sign in →',86,y+28);
+  } else if (mode==='dash'){
+    card('Portfolio','8'); card('Critical','2',false); card('Open WO','6');
+    x.fillStyle='#FDF2F4'; rr(x,12,y,W-24,52,12); x.fill(); x.strokeStyle='rgba(200,70,97,.4)'; x.stroke();
+    x.fillStyle='#C84661'; x.font='800 9px Inter,sans-serif'; x.fillText('AWAAB 24h · DEANSGATE 4B',22,y+20);
+    x.font='900 18px Inter,sans-serif'; x.fillText('18:12:44',22,y+42);
+  } else if (mode==='optical'||mode==='acoustic'){
+    x.fillStyle= mode==='optical'?'#a08672':'#241b23'; rr(x,12,y,W-24,220,14); x.fill();
+    x.strokeStyle='rgba(255,255,255,.9)'; x.lineWidth=2.5; x.strokeRect(46,y+40,W-92,140);
+    x.strokeStyle='#B995AD'; x.lineWidth=4;
+    [[46,y+40,1,1],[W-46,y+40,-1,1],[46,y+180,1,-1],[W-46,y+180,-1,-1]].forEach(function(k){
+      x.beginPath(); x.moveTo(k[0]+18*k[2],k[1]); x.lineTo(k[0],k[1]); x.lineTo(k[0],k[1]+18*k[3]); x.stroke(); });
+    x.fillStyle='rgba(185,149,173,.9)'; x.fillRect(50,y+110,W-100,3);
+    x.fillStyle='rgba(12,8,10,.8)'; rr(x,20,y+8,110,20,10); x.fill();
+    x.fillStyle='#fff'; x.font='700 9px Inter,sans-serif';
+    x.fillText(mode==='optical'?'① ambient → ② flash':'🎙 REC 0:05 · silent',28,y+22);
+    x.fillStyle='rgba(12,8,10,.8)'; rr(x,60,y+192,136,20,10); x.fill();
+    x.fillStyle='#bfe6d4'; x.fillText(mode==='optical'?'↕ 30 cm · ⊥ 90°':'2–5 cm from pipe run',68,y+206);
+    y+=230;
+    card(mode==='optical'?'Alignment':'Noise floor', mode==='optical'?'LOCKED':'-42 dB', mode==='optical');
+  } else if (mode==='heat'){
+    x.fillStyle='#a08672'; rr(x,12,y,W-24,220,14); x.fill();
+    var g=x.createRadialGradient(150,y+90,6,150,y+90,80);
+    g.addColorStop(0,'rgba(255,45,45,.95)'); g.addColorStop(.5,'rgba(255,157,45,.7)'); g.addColorStop(1,'rgba(0,0,0,0)');
+    x.fillStyle=g; x.beginPath(); x.arc(150,y+90,80,0,7); x.fill();
+    x.strokeStyle='#ffd166'; x.lineWidth=2.5; x.strokeRect(96,y+44,110,96);
+    x.fillStyle='#ffd166'; x.font='800 10px Inter,sans-serif'; x.fillText('SEVERE 0.91',96,y+38);
+    y+=230; card('YOLOv8 conf','0.87',true);
+  } else { // wo
+    x.fillStyle='#4A8B71'; rr(x,12,y,W-24,34,10); x.fill();
+    x.fillStyle='#fff'; x.font='800 11px Inter,sans-serif'; x.fillText('WO-1042 · Emergency 24h',22,y+22); y+=44;
+    card('Contractor','Apex Remediation'); card('Deadline','18:12:44',true);
+    x.fillStyle='#B995AD'; rr(x,12,y,W-24,44,12); x.fill();
+    x.fillStyle='#fff'; x.font='800 12px Inter,sans-serif'; x.fillText('Upload evidence →',62,y+28);
+  }
+  phoneScreenTex.needsUpdate = true;
+}
+/* ---- dashboard billboard painter ---- */
+function drawDash(){
+  var x = dashCtx, W=1024, H=576;
+  x.clearRect(0,0,W,H);
+  x.fillStyle='rgba(247,237,229,0.98)'; rr2(x,0,0,W,H,26); x.fill();
+  x.fillStyle='#E8DADB'; x.fillRect(0,0,210,H);
+  if (logoImg.complete && logoImg.naturalWidth){ try{ x.drawImage(logoImg,18,18,52,52);}catch(e){} }
+  x.fillStyle='#493344'; x.font='900 20px Inter,sans-serif'; x.fillText('HygroScope',80,44);
+  x.font='700 9px Inter,sans-serif'; x.fillStyle='#806C7B'; x.fillText('TEAM ZYPHER · PROPERTY INTELLIGENCE',80,60);
+  var nav=['Dashboard','Properties','Inspections','Moisture AI','Acoustic','Risk & Triage','Deadlines','Work Orders','Reports'];
+  nav.forEach(function(n,i){ var yy=100+i*42;
+    if(i===0){ x.fillStyle='#79566F'; rr2(x,12,yy-14,186,32,10); x.fill(); x.fillStyle='#fff'; }
+    else x.fillStyle='#493344';
+    x.font='700 13px Inter,sans-serif'; x.fillText(n,26,yy+6); });
+  x.fillStyle='#fff'; x.fillRect(210,0,W-210,64);
+  x.strokeStyle='#E6D5DC'; x.beginPath(); x.moveTo(210,64); x.lineTo(W,64); x.stroke();
+  x.fillStyle='#F7EDE5'; rr2(x,232,16,300,32,10); x.fill(); x.strokeStyle='#E6D5DC'; x.stroke();
+  x.fillStyle='#806C7B'; x.font='600 12px Inter,sans-serif'; x.fillText('Search properties, UPRN, work orders…',246,37);
+  x.fillStyle='#EFE4EC'; rr2(x,W-210,16,180,32,16); x.fill();
+  x.fillStyle='#493344'; x.font='800 11px Inter,sans-serif'; x.fillText('● Property Manager',W-196,37);
+  x.fillStyle='#493344'; x.font='900 24px Inter,sans-serif'; x.fillText('Portfolio Command',232,104);
+  x.fillStyle='#806C7B'; x.font='600 12px Inter,sans-serif'; x.fillText('8 buildings · 262 units · live',232,126);
+  var kpis=[['MANAGED PORTFOLIO','8','+2 qtr','#493344'],['PENDING SURVEYS','3','2 this wk','#493344'],
+            ['HIGH / CRITICAL','4','needs triage','#C84661'],['OPEN WORK ORDERS','6','2 emergency','#493344'],
+            ['ACTIVE CONTRACTORS','3','2 pending','#493344']];
+  kpis.forEach(function(k,i){ var kx=232+i*152;
+    x.fillStyle='#fff'; rr2(x,kx,146,142,86,14); x.fill(); x.strokeStyle='#E6D5DC'; x.stroke();
+    x.fillStyle='#806C7B'; x.font='800 9px Inter,sans-serif'; x.fillText(k[0],kx+12,168);
+    x.fillStyle=k[3]; x.font='900 30px Inter,sans-serif'; x.fillText(k[1],kx+12,204);
+    x.fillStyle='#4A8B71'; x.font='700 9px Inter,sans-serif'; x.fillText(k[2],kx+12,220); });
+  // line chart
+  x.fillStyle='#fff'; rr2(x,232,248,430,200,14); x.fill(); x.strokeStyle='#E6D5DC'; x.stroke();
+  x.fillStyle='#493344'; x.font='800 13px Inter,sans-serif'; x.fillText('Inspection activity · 6 months',248,274);
+  var pts=[38,52,66,62,82,100];
+  x.strokeStyle='#79566F'; x.lineWidth=3; x.beginPath();
+  pts.forEach(function(p,i){ var px=262+i*66, py=430-p*1.5; i?x.lineTo(px,py):x.moveTo(px,py); }); x.stroke();
+  x.fillStyle='rgba(185,149,173,.2)'; x.beginPath(); x.moveTo(262,430);
+  pts.forEach(function(p,i){ x.lineTo(262+i*66,430-p*1.5); }); x.lineTo(592,430); x.closePath(); x.fill();
+  pts.forEach(function(p,i){ x.fillStyle='#B995AD'; x.beginPath(); x.arc(262+i*66,430-p*1.5,4.5,0,7); x.fill(); });
+  // pie
+  x.fillStyle='#fff'; rr2(x,676,248,150,200,14); x.fill(); x.strokeStyle='#E6D5DC'; x.stroke();
+  x.fillStyle='#493344'; x.font='800 13px Inter,sans-serif'; x.fillText('Risk mix',692,274);
+  var cols=['#C84661','#B86B35','#B995AD','#4A8B71'];
+  cols.forEach(function(c,i){ x.beginPath(); x.moveTo(751,360); x.arc(751,360,52,-Math.PI/2+i*Math.PI/2,-Math.PI/2+(i+1)*Math.PI/2); x.closePath(); x.fillStyle=c; x.fill(); });
+  x.fillStyle='#fff'; x.beginPath(); x.arc(751,360,24,0,7); x.fill();
+  // SLA board
+  x.fillStyle='#fff'; rr2(x,840,248,160,200,14); x.fill(); x.strokeStyle='#E6D5DC'; x.stroke();
+  x.fillStyle='#493344'; x.font='800 13px Inter,sans-serif'; x.fillText('Statutory SLA',856,274);
+  [['DEANSGATE 4B','18:12:44'],['TRINITY COURT','21:45:09'],['PENDLETON 9-11','2d 04:10']].forEach(function(s,i){
+    var sy=292+i*52; x.fillStyle='#FDF2F4'; rr2(x,852,sy,136,44,10); x.fill(); x.strokeStyle='rgba(200,70,97,.35)'; x.stroke();
+    x.fillStyle='#C84661'; x.font='800 9px Inter,sans-serif'; x.fillText(s[0],862,sy+17);
+    x.font='900 16px Inter,sans-serif'; x.fillText(s[1],862,sy+36); });
+  x.fillStyle='#493344'; x.font='800 12px Inter,sans-serif'; x.fillText('Awaab\u2019s Law 2023 · emergency hazards 24h',232,478);
+  dashTex.needsUpdate = true;
+}
+function rr2(ctx,a,b,w,h,r){ctx.beginPath();ctx.moveTo(a+r,b);ctx.arcTo(a+w,b,a+w,b+h,r);ctx.arcTo(a+w,b+h,a,b+h,r);ctx.arcTo(a,b+h,a,b,r);ctx.arcTo(a,b,a+w,b,r);ctx.closePath();}
+function resize(){
+  var w = glCanvas.clientWidth || innerWidth, h = glCanvas.clientHeight || innerHeight;
+  renderer.setSize(w,h,false);
+  camera.aspect = w/h; camera.updateProjectionMatrix();
+  ovCanvas.width = w*devicePixelRatio; ovCanvas.height = h*devicePixelRatio;
+  ovCanvas.style.width=w+'px'; ovCanvas.style.height=h+'px';
+}
+function project(v){
+  var p = v.clone().project(camera);
+  return {x:(p.x*0.5+0.5)*ovCanvas.width, y:(-p.y*0.5+0.5)*ovCanvas.height, front:p.z<1};
+}
+function callout(at,dx,dy,title,sub,u){
+  if(!at.front) return;
+  var lx=at.x+dx*u, ly=at.y+dy*u;
+  ovCtx.strokeStyle='rgba(255,255,255,.9)'; ovCtx.lineWidth=2.5*u;
+  ovCtx.beginPath(); ovCtx.moveTo(at.x,at.y); ovCtx.lineTo(lx,ly); ovCtx.stroke();
+  ovCtx.fillStyle='#F2C14E'; ovCtx.beginPath(); ovCtx.arc(at.x,at.y,7*u,0,7); ovCtx.fill();
+  ovCtx.strokeStyle='#fff'; ovCtx.lineWidth=3*u; ovCtx.stroke();
+  ovCtx.font='800 '+(20*u)+'px Inter,sans-serif';
+  var w1=ovCtx.measureText(title).width;
+  ovCtx.font='600 '+(14*u)+'px Inter,sans-serif';
+  var w=Math.max(w1, sub?ovCtx.measureText(sub).width:0)+38*u, h=(sub?62:42)*u;
+  var bx = dx<0 ? lx-w : lx;
+  ovCtx.save(); ovCtx.shadowColor='rgba(0,0,0,.35)'; ovCtx.shadowBlur=18*u;
+  ovCtx.fillStyle='rgba(255,255,255,.96)'; rr2(ovCtx,bx,ly-h/2,w,h,14*u); ovCtx.fill(); ovCtx.restore();
+  ovCtx.fillStyle='#79566F'; rr2(ovCtx,bx,ly-h/2,7*u,h,3*u); ovCtx.fill();
+  ovCtx.fillStyle='#0B2E2B'; ovCtx.font='800 '+(20*u)+'px Inter,sans-serif';
+  ovCtx.fillText(title,bx+18*u, sub?ly-10*u:ly+7*u);
+  if(sub){ ovCtx.fillStyle='#4F6B68'; ovCtx.font='600 '+(14*u)+'px Inter,sans-serif'; ovCtx.fillText(sub,bx+18*u,ly+16*u); }
+}
+var V3 = function(a,b,c){return new THREE.Vector3(a,b,c);};
+
+/* =====================================================================
+   CHAPTERS
+   ===================================================================== */
+var CH = [
+{kick:"Cold open",title:"Greater Manchester · 06:40",vo:null,rain:true,screen:'dash',
+ p:[-26,16,-34],t:[0,10,0],
+ lower:["Nine millimetres of rain in six hours","Behind these walls, water is already moving"],
+ narration:"Greater Manchester. Nine millimetres of rain in six hours. Behind these walls, water is already moving.",
+ anchors:[]},
+{kick:"The problem",title:"Hidden moisture destroys homes before anyone sees it",vo:1,screen:'dash',
+ p:[1,7,-7],t:[10,8,0],
+ cite:["Awaab's Law 2023 · emergency hazards 24h"],
+ narration:"Every year, hidden moisture destroys social housing long before anyone sees a stain. Water accumulates silently behind drywall and inside cavities for months. By the time paint bubbles, the structure is already compromised, and under Awaab's Law, landlords now face a twenty-four hour statutory clock.",
+ anchors:[[10,7,2,'Damp stain · facade','JET Δ 0.91',-190,-40],[10,4,-3,'Paint blistering','visible too late',-190,60],[10,11,0,'Cavity void','the hidden water path',150,-70]]},
+{kick:"Meet the inspector",title:"Chartered surveyor. Whole lab in a pocket.",vo:null,screen:'signin',
+ p:[3.4,1.9,3.6],t:[6,1.4,0],
+ lower:["Field Building Inspector · RICS Northwest","Optics, acoustics and psychrometrics in one hand"],
+ narration:"Meet the field inspector. Chartered, accredited, and carrying the entire diagnostic laboratory in one pocket.",
+ anchors:[[6,1.9,0,'Field Inspector','RICS Northwest',-180,-60],[6.62,1.45,0.18,'HygroScope app','offline PWA',150,40]]},
+{kick:"The app",title:"Sign in, then one queue ordered by statutory risk",vo:2,screen:'dash',
+ p:[5.5,1.75,1.5],t:[6.62,1.45,0.18],
+ narration:"HygroScope is a mobile field app paired with an operations dashboard. The phone captures three independent physical signals on site. The dashboard fuses them into one explainable risk score for every unit in the portfolio.",
+ anchors:[[6.62,1.62,0.18,'Live queue','8 buildings · 2 critical',150,-60]]},
+{kick:"Test 1 of 2 · Optical",title:"Guided two-shot pair: ambient, then flash",vo:3,screen:'optical',torch:1,
+ p:[5.9,1.8,1.5],t:[8.6,1.6,0],
+ cite:["Feris et al. 2004 · multi-flash specular imaging"],
+ lower:["Hold 30 cm out, square to the wall","Shot 1 torch off · Shot 2 torch on · same frame"],
+ narration:"Optical capture is a guided two-shot pair. Hold the phone about thirty centimetres from the wall, square to the surface. First shot: room light only, torch off. Second shot: identical frame with the torch on. The overlay keeps you aligned and steady.",
+ anchors:[[8.6,1.6,0,'30 cm standoff','⊥ 90° to surface',150,-70],[6.62,1.5,0.18,'① ambient → ② flash','torch synced',-190,50]]},
+{kick:"Test 2 of 2 · Acoustic",title:"Listen for the micro-weep the ear cannot hear",vo:4,screen:'acoustic',
+ p:[6.1,1.6,1.2],t:[9.6,1.2,0],
+ cite:["AIDIC CET 2013 · FFT leak spectra","Gao et al. · leak-noise correlation"],
+ lower:["Mic on the surface, 2–5 cm from the pipe run","Room silent · record five seconds"],
+ narration:"Acoustic capture listens for micro-leaks. Place the microphone against the surface, two to five centimetres from the suspected pipe run. Keep the room silent and record five seconds. Escaping water under pressure radiates a high-frequency hiss that human ears miss.",
+ anchors:[[9.6,1.2,0,'Mic 2–5 cm','pressurised pipe run',150,-50],[6.62,1.4,0.18,'REC 0:05','noise floor −42 dB',-190,50]]},
+{kick:"OpenCV · align & subtract",title:"SIFT → RANSAC → LAB normalise → Δ",vo:5,screen:'optical',
+ p:[7.4,2.2,2.6],t:[10,2,0],panel:'steps',
+ cite:["Lowe 2004 · SIFT","Fischler & Bolles 1981 · RANSAC","Bradski 2000 · OpenCV"],
+ narration:"OpenCV aligns the two photos with SIFT keypoints and a RANSAC homography, then normalises lightness in CIE LAB space so the torch adds nothing to dry substrate. Subtracting ambient from flash isolates specular reflection, which spikes exactly where water sits near the surface.",
+ anchors:[]},
+{kick:"OpenCV · anomalies + YOLO",title:"Difference field to heatmap, cross-checked by YOLOv8",vo:6,screen:'heat',
+ p:[5.6,1.8,1.4],t:[6.62,1.45,0.18],
+ cite:["OpenCV · connected components","YOLOv8 · Jocher et al. 2023"],
+ narration:"Adaptive thresholding and morphological cleaning remove sensor noise. Connected components become candidate anomalies with area, centroid and severity. The difference field is mapped to a JET false-colour heatmap and blended back over the photo for the inspector.",
+ anchors:[[6.62,1.6,0.18,'YOLOv8 conf 0.87','water-damage · warping',160,-60]]},
+{kick:"Acoustic DSP",title:"Band-pass → FFT → Welch PSD: the narrowband peak",vo:7,screen:'acoustic',panel:'spec',
+ p:[7.4,2.2,2.6],t:[10,2,0],
+ cite:["Welch 1967 · PSD estimator","SciPy signal"],
+ narration:"The acoustic branch filters the recording with a Butterworth band-pass, then takes a real FFT and a Welch power spectral density. A pressurised micro-weep shows a narrowband peak, here near two point four kilohertz, distinct from broad ambient noise.",
+ anchors:[]},
+{kick:"The physics",title:"Why flash reveals water: specular vs diffuse",vo:8,screen:'optical',panel:'rays',torch:1,
+ p:[8,2,1.8],t:[10,1.8,0],
+ cite:["Feris et al. 2004","ε water ≈ 80 vs dry ≈ 3"],
+ narration:"Why does flash reveal water? Wet substrate has a smoother, more specular surface and a higher refractive index than dry porous material, so it reflects the torch straight back at the lens. Dry matte substrate scatters light diffusely and disappears after normalisation.",
+ anchors:[]},
+{kick:"Psychrometrics",title:"Dew point margin: condensation before it forms",vo:9,screen:'dash',panel:'dew',
+ p:[-6,11,-16],t:[0,16,0],
+ cite:["Magnus–Tetens · Alduchov & Eskridge 1996","Open-Meteo"],
+ narration:"Weather intelligence adds the third signal. Using the Magnus-Tetens formulation, we compute dew point from live temperature and humidity. When surface temperature falls within a few degrees of dew point, condensation and mould germination become likely.",
+ anchors:[]},
+{kick:"Lab-validated",title:"Nothing invented: every channel reproduces published method",vo:null,panel:'vgrid',
+ p:[-20,13,-30],t:[0,10,0],
+ lower:["Peer-reviewed foundations, cited on screen","Optics · acoustics · dielectrics · psychrometrics"],
+ narration:"None of this is invented. Every channel reproduces a published, peer-reviewed method, and the film says so on screen.",
+ anchors:[]},
+{kick:"Result & dispatch",title:"Three channels fuse into one explainable score",vo:10,screen:'wo',panel:'fuse',
+ p:[5.5,1.75,1.5],t:[6.62,1.45,0.18],
+ cite:["Explainable triage · Awaab's Law 2023"],
+ narration:"All three channels fuse into one explainable triage score that drives statutory deadlines and contractor dispatch. The method stands on published work: Lowe's SIFT, Fischler and Bolles' RANSAC, Welch's spectral estimator, and OpenCV. HygroScope: detect early, prevent damage, protect properties.",
+ anchors:[[6.62,1.6,0.18,'WO-1042 dispatched','Apex · Emergency 24h',160,-60]]},
+{kick:"The dashboard",title:"Eight buildings become one queue, ordered by risk",vo:null,screen:'dash',dash:1,
+ p:[0,4.4,19],t:[0,4.4,10],
+ lower:["Housing office · web operations view","Statutory SLA board, contractor verification, audit trail"],
+ narration:"Back at the housing office, the manager's dashboard turns eight buildings into one queue, ordered by statutory risk, with contractor verification and a full audit trail.",
+ anchors:[[ -5,6.4,10,'Portfolio 8','2 critical · 6 open WO',-170,-40],[5,6.4,10,'Awaab SLA 18:12:44','statutory countdown',150,-40],[0,1.6,10,'Contractor verification','3 approved · 2 pending',150,60]]},
+{kick:"Architecture",title:"One PWA · one FastAPI core · three engines · one database",vo:null,panel:'arch',
+ p:[-26,16,-34],t:[0,10,0],
+ lower:["Deployable on Render, offline-capable in the field","Resilient in-memory store if MongoDB is unreachable"],
+ narration:"One progressive web app, one FastAPI core, three analysis engines, one database. Deployable anywhere, and offline-capable in the field.",
+ anchors:[]},
+{kick:"Impact",title:"Earlier detection. Fewer emergencies. Healthier homes.",vo:null,panel:'impact',end:1,
+ p:[-32,20,-42],t:[0,12,0],
+ lower:["Every damp hamlet. Earlier care.","HygroScope · Team Zypher"],
+ narration:"Earlier detection. Fewer emergencies. Healthier homes. HygroScope — detect early, prevent damage, protect properties.",
+ anchors:[]}
+];
+
+var PANELS = {
+ steps:'<div class="steps">'+
+  '<div class="step" data-on="0"><div class="n">STEP 1</div><div class="h">SIFT keypoints</div><div class="d">Scale-invariant features matched across ambient and flash frames.</div></div>'+
+  '<div class="step" data-on="1"><div class="n">STEP 2</div><div class="h">RANSAC homography</div><div class="d">Robust transform rejects outliers; flash warped into ambient space.</div></div>'+
+  '<div class="step" data-on="2"><div class="n">STEP 3</div><div class="h">CIE LAB L* norm</div><div class="d">Background lightness equalised so torch gain cancels on dry material.</div></div>'+
+  '<div class="step" data-on="3"><div class="n">STEP 4</div><div class="h">Δ = flash − ambient</div><div class="d">Specular difference: dry → ~0, wet → strong.</div></div></div>',
+ spec:'<div class="spec"><div style="font-size:11px;font-weight:800;color:#F2C14E;letter-spacing:.14em">POWER SPECTRAL DENSITY (WELCH)</div>'+
+  '<div class="bars">'+Array.from({length:56}).map(function(_,i){var h=8+40*Math.exp(-Math.pow((i-34)/6,2))+(i%3)*4;return '<i style="height:'+Math.min(h,70)+'%;animation-delay:'+(i%7)*0.13+'s"></i>';}).join("")+'</div>'+
+  '<div class="peak" style="left:63%"></div><div style="position:absolute;left:64%;top:14%;color:#F2C14E;font-size:12px;font-weight:800">2.4 kHz · micro-weep</div>'+
+  '<div style="position:absolute;left:16px;right:16px;bottom:34px;height:1px;background:rgba(255,255,255,.3)"></div></div>',
+ rays:'<div class="rays">'+
+  '<div class="raybox"><h4>WET substrate → specular</h4><p>Water fills pores, raising refractive index and smoothing the surface. Torch light mirrors back to the lens → bright in the flash frame.</p><div class="diagram"><div class="ray in"></div><div class="ray out"></div></div><div class="stat"><span>n ≈ 1.33 (water)</span><b>Δ bright</b></div></div>'+
+  '<div class="raybox"><h4>DRY substrate → diffuse</h4><p>Air-filled porous material scatters the torch in every direction. After L* normalisation the flash adds ~nothing → cancels in Δ.</p><div class="diagram"><div class="ray in"></div><span class="scatter" style="--dx:40px;--dy:-30px"></span><span class="scatter" style="--dx:52px;--dy:-6px;animation-delay:.3s"></span><span class="scatter" style="--dx:36px;--dy:18px;animation-delay:.6s"></span></div><div class="stat"><span>n ≈ 1.0 (air)</span><b>Δ ≈ 0</b></div></div></div>',
+ dew:'<div class="dew"><div style="font-size:11px;font-weight:800;letter-spacing:.14em;color:#F2C14E">DEW POINT MARGIN</div>'+
+  '<div class="gauge"><div class="mark dewp"></div><div class="mark temp"></div></div>'+
+  '<div style="display:flex;gap:10px;margin-top:14px"><div class="k" style="flex:1"><div class="l">Air temp</div><div class="v">11.4°C</div></div><div class="k" style="flex:1"><div class="l">RH</div><div class="v">92%</div></div><div class="k" style="flex:1"><div class="l">Dew point</div><div class="v" style="color:#8fd3ff">10.2°C</div></div><div class="k red" style="flex:1"><div class="l">Margin</div><div class="v">1.2°C</div></div></div>'+
+  '<div class="formula">γ = ln(RH/100) + (b·T)/(c+T)  →  Td = c·γ/(b−γ)   (b=17.62, c=243.12°C)</div></div>',
+ vgrid:'<div class="vgrid">'+
+  '<div class="vcard"><div class="tag">OPTICAL CHANNEL</div><h4>Multi-flash specular imaging</h4><p>Flash-position differencing to reason about specular reflection — the same principle behind our ambient/flash pair.</p><div class="src">✓ Feris et al., 2004 · SIFT Lowe 2004 · RANSAC Fischler & Bolles 1981</div></div>'+
+  '<div class="vcard"><div class="tag">ACOUSTIC CHANNEL</div><h4>Spectral leak detection</h4><p>Microphone FFT spectra show characteristic leak peaks absent in no-leak baselines; correlation methods localise them.</p><div class="src">✓ AIDIC CET 2013 · Gao et al., Inst. of Acoustics CAS</div></div>'+
+  '<div class="vcard"><div class="tag">DIELECTRIC + CLIMATE</div><h4>Pinless capacitance & psychrometrics</h4><p>Pinless meters infer moisture from dielectric permittivity; dew point from Magnus–Tetens with improved coefficients.</p><div class="src">✓ Pinless EM moisture metering · Alduchov & Eskridge 1996</div></div></div>',
+ fuse:'<div style="text-align:center"><div class="fuse">'+
+  '<div class="chan"><div class="ic">📷</div><div class="h">Optical Δ</div><div class="d">heatmap 0.91</div></div>'+
+  '<div class="chan"><div class="ic">🎙</div><div class="h">Acoustic PSD</div><div class="d">2.4 kHz peak</div></div>'+
+  '<div class="chan"><div class="ic">🌦</div><div class="h">Psychrometric</div><div class="d">margin 1.2°C</div></div>'+
+  '<div class="arrow">➜</div>'+
+  '<div class="score"><div class="v">86</div><div class="l">Explainable Risk</div></div></div>'+
+  '<div class="flow"><span class="fstep done">Detect</span><span class="farrow">→</span><span class="fstep done">Investigate 24h</span><span class="farrow">→</span><span class="fstep cur">Dispatch contractor</span><span class="farrow">→</span><span class="fstep">Repair 7d</span><span class="farrow">→</span><span class="fstep">Sign-off</span></div></div>',
+ arch:'<div class="arch">'+
+  '<div class="acol"><div class="abox"><b>Mobile PWA</b><span>Next.js · installable · offline</span></div><div class="abox"><b>Ops Dashboard</b><span>RBAC · 4 roles</span></div></div>'+
+  '<div class="aarrow">➜</div><div class="acol"><div class="abox hot"><b>FastAPI core</b><span>JWT · audit · SLA engine</span></div></div>'+
+  '<div class="aarrow">➜</div><div class="acol"><div class="abox"><b>OpenCV optics</b><span>SIFT · LAB · Δ heatmap</span></div><div class="abox"><b>SciPy acoustics</b><span>band-pass · FFT · Welch</span></div><div class="abox"><b>YOLOv8</b><span>moisture · breakage</span></div></div>'+
+  '<div class="aarrow">➜</div><div class="acol"><div class="abox"><b>MongoDB Atlas</b><span>17 collections · fallback</span></div><div class="abox"><b>Open-Meteo</b><span>psychrometrics</span></div></div></div>',
+ impact:'<div style="text-align:center"><div class="impact">'+
+  '<div class="istat"><div class="v">24<em>h</em></div><div class="l">statutory response held, every time</div></div>'+
+  '<div class="istat"><div class="v">3<em>×</em></div><div class="l">earlier detection than visual survey alone</div></div>'+
+  '<div class="istat"><div class="v">0<em>drills</em></div><div class="l">non-destructive, zero make-good</div></div>'+
+  '<div class="istat"><div class="v">1<em>score</em></div><div class="l">explainable fusion of three channels</div></div></div></div>'+
+  '<div class="refs"><b>Research provenance —</b> Lowe, D.G. (2004) <i>Distinctive Image Features from Scale-Invariant Keypoints</i> · Fischler & Bolles (1981) <i>RANSAC</i>, CACM · Welch, P.D. (1967) <i>Use of FFT for PSD Estimation</i>, IEEE Trans. Audio · Feris et al. (2004) <i>Specular Reflection Reduction with Multi-Flash Imaging</i> · Bradski (2000) <i>The OpenCV Library</i> · Jocher et al. (2023) <i>Ultralytics YOLOv8</i> · AIDIC CET (2013) <i>Spectral Analysis for Detection of Leaks in Pipes</i> · Gao et al., <i>Inst. of Acoustics, CAS</i> · Alduchov & Eskridge (1996) <i>Improved Magnus coefficients</i> · Awaab\u2019s Law, Housing Act (2023).</div>'
+};
+
+/* ---------- engine ---------- */
+var film=document.getElementById('film'),panels=document.getElementById('panels'),
+ subsEl=document.getElementById('subs'),subLine=document.getElementById('subLine'),
+ pfill=document.getElementById('pfill'),meta=document.getElementById('meta'),dots=document.getElementById('dots'),
+ cKick=document.getElementById('cKick'),cTitle=document.getElementById('cTitle'),cCite=document.getElementById('cCite'),
+ lower=document.getElementById('lower'),loT=document.getElementById('loT'),loS=document.getElementById('loS'),
+ card=document.getElementById('card');
+var S={i:0,playing:false,voice:true,subs:true,score:true,audio:null,t0:0,elapsed:0,cues:[],raf:null,est:null,started:false};
+
+document.getElementById('sceneChips').innerHTML=CH.map(function(c,i){return '<span class="sp">'+(i+1)+'. '+c.kick+'</span>';}).join('');
+dots.innerHTML=CH.map(function(_,i){return '<i data-i="'+i+'"></i>';}).join('');
+dots.addEventListener('click',function(e){var t=e.target.closest('i');if(t)go(+t.dataset.i);});
+function estSec(t){return Math.max(5,t.length/15.5);}
+function cues(t){var p=t.match(/[^.!?]+[.!?]?/g)||[t],tot=p.join('').length||1,acc=0;
+ return p.map(function(x){var f=x.length/tot,c={t:x.trim(),a:acc,b:acc+f};acc+=f;return c;});}
+
+var SC=null;
+function scoreOn(){ if(SC||!S.score)return;
+ try{ var ctx=new (window.AudioContext||window.webkitAudioContext)();
+  var master=ctx.createGain();master.gain.value=0;master.connect(ctx.destination);
+  master.gain.linearRampToValueAtTime(0.5,ctx.currentTime+2);
+  var len=ctx.sampleRate*2,nb=ctx.createBuffer(1,len,ctx.sampleRate),nd=nb.getChannelData(0),last=0;
+  for(var i=0;i<len;i++){var w=Math.random()*2-1;last=(last+0.02*w)/1.02;nd[i]=last*3.5;}
+  var src=ctx.createBufferSource();src.buffer=nb;src.loop=true;
+  var lp=ctx.createBiquadFilter();lp.type='lowpass';lp.frequency.value=850;
+  var rg=ctx.createGain();rg.gain.value=0.16;src.connect(lp);lp.connect(rg);rg.connect(master);src.start();
+  var pad=ctx.createGain();pad.gain.value=0.05;pad.connect(master);
+  [110,164.8,220].forEach(function(f,k){var o=ctx.createOscillator();o.type='sine';o.frequency.value=f;
+   var g=ctx.createGain();g.gain.value=0.4/(k+1);var lfo=ctx.createOscillator();lfo.frequency.value=0.07+k*0.03;
+   var lg=ctx.createGain();lg.gain.value=0.15;lfo.connect(lg);lg.connect(g.gain);o.connect(g);g.connect(pad);o.start();lfo.start();});
+  SC={ctx:ctx,master:master,rain:rg};
+ }catch(e){SC=null;} }
+function scoreDuck(on){if(SC&&SC.rain)SC.rain.gain.setTargetAtTime(on?0.06:0.16,SC.ctx.currentTime,0.4);}
+function scoreStop(){if(SC){try{SC.master.gain.setTargetAtTime(0,SC.ctx.currentTime,0.3);var c=SC.ctx;setTimeout(function(){c.close();},900);}catch(e){}SC=null;}}
+
+function startChapter(i){
+ S.i=i;S.elapsed=0;
+ var c=CH[i];
+ cKick.textContent=c.kick;cTitle.textContent=c.title;
+ cCite.innerHTML=(c.cite||[]).map(function(x){return '<span>'+x+'</span>';}).join('');
+ if(c.lower){lower.classList.remove('hide');loT.textContent=c.lower[0];loS.textContent=c.lower[1]||'';}else lower.classList.add('hide');
+ panels.innerHTML=c.panel?PANELS[c.panel]:'';
+ if(c.panel==='steps'){var st=panels.querySelectorAll('.step');st.forEach(function(el,k){setTimeout(function(){el.classList.add('on');},500+k*1500);});}
+ if(c.screen)drawPhoneScreen(c.screen);
+ wantTorch=c.torch?1:0;
+ dashBoard.material.opacity=0; wantDash=c.dash?1:0;
+ wantPos.set(c.p[0],c.p[1],c.p[2]); wantTgt.set(c.t[0],c.t[1],c.t[2]);
+ // cards
+ if(i===0){card.classList.remove('off');document.getElementById('cardG').textContent='TEAM ZYPHER PRESENTS';
+   document.getElementById('cardN').textContent='HygroScope';document.getElementById('cardTag').textContent='Predictive property intelligence for social housing';}
+ else if(i===1)card.classList.add('off');
+ if(c.end){card.classList.remove('off');document.getElementById('cardG').textContent='TEAM ZYPHER · 2026';
+   document.getElementById('cardN').textContent='HygroScope';document.getElementById('cardTag').textContent='Detect early · Prevent damage · Protect properties';}
+ else if(i!==0)card.classList.add('off');
+ meta.textContent='Ch '+(i+1)+' / '+CH.length;
+ Array.prototype.forEach.call(dots.children,function(d,k){d.className=k<i?'done':(k===i?'cur':'');});
+ if(S.audio){S.audio.pause();S.audio=null;}
+ var uri=c.vo?AUDIO_MANIFEST[String(c.vo-1)]:null;
+ if(uri&&S.voice){S.audio=new Audio(uri);S.audio.play().catch(function(){S.audio=null;});scoreDuck(true);}else scoreDuck(false);
+ S.t0=performance.now();S.est=S.audio?null:estSec(c.narration);
+ S.cues=cues(c.narration);
+ loop();
+}
+var wantTorch=0, wantDash=0;
+function loop(){
+ cancelAnimationFrame(S.raf);
+ function frame(){
+  if(!S.playing)return;
+  var cur=(S.audio&&!S.audio.paused&&S.audio.duration)?S.audio.currentTime:S.elapsed+(performance.now()-S.t0)/1000;
+  var dur=(S.audio&&S.audio.duration)?S.audio.duration:(S.est||estSec(CH[S.i].narration));
+  if(S.subs){var f=Math.min(1,cur/dur),cue=null;
+   for(var k=0;k<S.cues.length;k++){if(f>=S.cues[k].a&&f<S.cues[k].b){cue=S.cues[k];break;}}
+   subLine.textContent=cue?cue.t:'';}else subLine.textContent='';
+  pfill.style.width=(100*((S.i+Math.min(1,cur/dur))/CH.length))+'%';
+  var ended=S.audio?S.audio.ended:(cur>=dur);
+  if(ended){scoreDuck(false);if(S.i<CH.length-1)startChapter(S.i+1);else stop();return;}
+  S.raf=requestAnimationFrame(frame);
+ }
+ S.raf=requestAnimationFrame(frame);
+}
+function renderLoop(){
+ requestAnimationFrame(renderLoop);
+ var dt=Math.min(clock.getDelta(),0.05), t=clock.elapsedTime;
+ // camera dolly + handheld
+ camPos.lerp(wantPos, 1-Math.pow(0.0018,dt));
+ camTgt.lerp(wantTgt, 1-Math.pow(0.0018,dt));
+ camera.position.set(camPos.x+Math.sin(t*0.7)*0.06, camPos.y+Math.sin(t*0.9)*0.05, camPos.z+Math.cos(t*0.6)*0.06);
+ camera.lookAt(camTgt);
+ // rain
+ var p=rainGeo.attributes.position.array;
+ for(var i=1;i<p.length;i+=3){p[i]-=dt*14;if(p[i]<0)p[i]=34;}
+ rainGeo.attributes.position.needsUpdate=true;
+ // torch + dashboard fade
+ torchOn+=(wantTorch-torchOn)*Math.min(1,dt*4);
+ torch.intensity=torchOn*(55+Math.sin(t*30)*4);
+ dashBoard.material.opacity+=(wantDash-dashBoard.material.opacity)*Math.min(1,dt*2.5);
+ inspector.position.y=Math.abs(Math.sin(t*1.6))*0.03;
+ phoneGroup.rotation.z=Math.sin(t*1.1)*0.02;
+ renderer.render(scene,camera);
+ drawOverlay();
+}
+function drawOverlay(){
+ var u=Math.min(ovCanvas.width,ovCanvas.height)/900;
+ ovCtx.clearRect(0,0,ovCanvas.width,ovCanvas.height);
+ var c=CH[S.i];
+ (c.anchors||[]).forEach(function(a){
+  callout(project(V3(a[0],a[1],a[2])),a[3]*u,a[4]*u,a[5],a[6],u);
+ });
+}
+function play(){S.playing=true;document.getElementById('btnPlay').textContent='⏸';
+ if(S.audio&&S.voice)S.audio.play().catch(function(){});S.t0=performance.now();loop();}
+function pause(){S.playing=false;document.getElementById('btnPlay').textContent='▶';
+ if(S.audio)S.audio.pause();else S.elapsed+=(performance.now()-S.t0)/1000;cancelAnimationFrame(S.raf);}
+function stop(){pause();document.getElementById('btnPlay').textContent='⟲';}
+function go(i){i=Math.max(0,Math.min(CH.length-1,i));startChapter(i);if(S.playing)play();}
+function enterFilm(withVoice){
+ S.voice=withVoice;
+ document.getElementById('tgVoice').setAttribute('aria-pressed',String(withVoice));
+ document.getElementById('app').style.display='none';film.classList.add('on');
+ if(film.requestFullscreen)film.requestFullscreen().catch(function(){});
+ if(!S.started){S.started=true;initWorld();renderLoop();}
+ resize();scoreOn();S.playing=true;startChapter(0);play();
+}
+function exitFilm(){pause();scoreStop();
+ if(document.fullscreenElement&&document.exitFullscreen)document.exitFullscreen().catch(function(){});
+ film.classList.remove('on');document.getElementById('app').style.display='flex';}
+
+document.getElementById('startBtn').addEventListener('click',function(){enterFilm(true);});
+document.getElementById('silentBtn').addEventListener('click',function(){enterFilm(false);});
+document.getElementById('btnExit').addEventListener('click',exitFilm);
+document.getElementById('btnPlay').addEventListener('click',function(){S.playing?pause():play();});
+document.getElementById('btnPrev').addEventListener('click',function(){go(S.i-1);});
+document.getElementById('btnNext').addEventListener('click',function(){go(S.i+1);});
+function tSubs(){S.subs=!S.subs;subsEl.classList.toggle('hidden',!S.subs);
+ document.getElementById('btnSubs').style.opacity=S.subs?1:.4;
+ document.getElementById('tgSubs').setAttribute('aria-pressed',String(S.subs));}
+function tVoice(){S.voice=!S.voice;if(!S.voice&&S.audio)S.audio.pause();
+ if(S.voice&&S.audio&&S.playing)S.audio.play().catch(function(){});
+ scoreDuck(S.voice&&!!S.audio);
+ document.getElementById('btnVoice').textContent=S.voice?'🔊':'🔇';
+ document.getElementById('tgVoice').setAttribute('aria-pressed',String(S.voice));}
+function tScore(){S.score=!S.score;if(S.score)scoreOn();else scoreStop();
+ document.getElementById('btnScore').style.opacity=S.score?1:.4;
+ document.getElementById('tgScore').setAttribute('aria-pressed',String(S.score));}
+document.getElementById('btnSubs').addEventListener('click',tSubs);
+document.getElementById('tgSubs').addEventListener('click',tSubs);
+document.getElementById('btnVoice').addEventListener('click',tVoice);
+document.getElementById('tgVoice').addEventListener('click',tVoice);
+document.getElementById('btnScore').addEventListener('click',tScore);
+document.getElementById('tgScore').addEventListener('click',tScore);
+document.addEventListener('keydown',function(e){if(!film.classList.contains('on'))return;
+ if(e.code==='Space'){e.preventDefault();S.playing?pause():play();}
+ if(e.key==='ArrowRight')go(S.i+1);
+ if(e.key==='ArrowLeft')go(S.i-1);
+ if(e.key==='Escape'&&!document.fullscreenElement)exitFilm();});
+</script>
+</body>
+</html>
