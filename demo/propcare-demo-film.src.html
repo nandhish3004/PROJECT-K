@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+<title>PropCare NW — Interactive Demo Film</title>
+<style>
+:root{
+  --plum:#79566F; --plum-d:#67475E; --accent:#B995AD; --cream:#F7EDE5;
+  --navy:#493344; --muted:#806C7B; --border:#E6D5DC; --lav:#E8DADB;
+  --mint:#4A8B71; --warn:#B86B35; --crit:#C84661; --white:#fff;
+  --rx:0deg; --ry:0deg;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:radial-gradient(1200px 700px at 20% -10%, #EFE4EC 0%, transparent 60%),
+             radial-gradient(900px 600px at 90% 110%, #EFF8F3 0%, transparent 55%),
+             var(--cream);
+  color:var(--navy);
+  font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  -webkit-font-smoothing:antialiased; overflow:hidden;
+}
+button{font:inherit;cursor:pointer;border:none;background:none;color:inherit}
+
+/* ---------- LANDING ---------- */
+#app{height:100%;display:flex;align-items:center;justify-content:center;padding:24px;overflow:auto}
+.hero{max-width:860px;width:100%;text-align:center}
+.badge{display:inline-flex;align-items:center;gap:8px;border:1px solid rgba(185,149,173,.35);
+  background:#EFE4EC;color:var(--accent);font-size:12px;font-weight:600;border-radius:999px;padding:6px 14px}
+.badge .dot{width:8px;height:8px;border-radius:50%;background:var(--accent);animation:pulse 2.4s infinite}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(1.25)}}
+h1{font-size:clamp(30px,5.4vw,58px);line-height:1.1;letter-spacing:-.02em;font-weight:800;margin:18px 0 14px}
+h1 .a{color:var(--accent)}
+.sub{color:var(--muted);font-size:clamp(14px,1.6vw,17px);line-height:1.6;max-width:640px;margin:0 auto}
+.cta{margin-top:30px;display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
+.btn-primary{min-height:52px;padding:0 30px;border-radius:14px;background:var(--accent);color:#fff;
+  font-weight:600;font-size:15px;display:inline-flex;align-items:center;gap:10px;
+  box-shadow:0 10px 26px -8px rgba(185,149,173,.55);transition:.2s}
+.btn-primary:hover{background:var(--plum-d);transform:translateY(-2px)}
+.btn-ghost{min-height:52px;padding:0 26px;border-radius:14px;border:1px solid var(--border);background:#fff;
+  font-weight:600;font-size:15px;color:var(--navy);transition:.2s}
+.btn-ghost:hover{background:var(--cream)}
+.opts{margin-top:26px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+.chip{border:1px solid var(--border);background:#fff;border-radius:999px;padding:8px 16px;font-size:12px;
+  font-weight:600;color:var(--muted);display:inline-flex;align-items:center;gap:8px;transition:.15s}
+.chip[aria-pressed="true"]{background:var(--plum);color:#fff;border-color:var(--plum)}
+.chip .sw{width:8px;height:8px;border-radius:50%;background:currentColor;opacity:.7}
+.scenes-preview{margin-top:26px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+.sp{font-size:11px;font-weight:600;color:var(--muted);border:1px dashed var(--border);border-radius:999px;padding:5px 12px;background:rgba(255,255,255,.6)}
+.fineprint{margin-top:22px;font-size:11px;color:var(--muted)}
+
+/* ---------- FILM SHELL ---------- */
+#film{position:fixed;inset:0;background:#160f14;display:none;overflow:hidden}
+#film.on{display:block}
+#stage{position:absolute;inset:0 0 96px 0;perspective:1400px;overflow:hidden}
+.world{position:absolute;inset:0;transform-style:preserve-3d;
+  transform:rotateX(var(--rx)) rotateY(var(--ry));transition:transform .12s ease-out}
+.vignette{position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(120% 90% at 50% 40%, transparent 55%, rgba(0,0,0,.55) 100%)}
+.scene-title{position:absolute;top:26px;left:0;right:0;text-align:center;color:#fff;z-index:5;pointer-events:none}
+.scene-title .k{font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--accent);font-weight:700}
+.scene-title .t{font-size:clamp(18px,2.6vw,30px);font-weight:800;letter-spacing:-.01em;margin-top:6px;
+  text-shadow:0 2px 18px rgba(0,0,0,.5)}
+.cite{position:absolute;top:96px;left:0;right:0;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;z-index:5;pointer-events:none}
+.cite span{font-size:10px;font-weight:600;color:rgba(255,255,255,.75);background:rgba(255,255,255,.08);
+  border:1px solid rgba(255,255,255,.16);border-radius:999px;padding:4px 10px;backdrop-filter:blur(6px)}
+
+/* subtitles */
+#subs{position:absolute;left:0;right:0;bottom:104px;display:flex;justify-content:center;z-index:6;pointer-events:none;padding:0 24px}
+#subs .line{max-width:820px;background:rgba(12,8,10,.72);backdrop-filter:blur(8px);color:#fff;
+  border:1px solid rgba(255,255,255,.12);border-radius:14px;padding:12px 20px;font-size:clamp(14px,1.7vw,19px);
+  line-height:1.5;text-align:center;font-weight:500;box-shadow:0 8px 30px rgba(0,0,0,.4)}
+#subs.hidden{display:none}
+
+/* HUD */
+#hud{position:absolute;left:0;right:0;bottom:0;height:96px;display:flex;align-items:center;gap:14px;
+  padding:0 20px;background:linear-gradient(to top, rgba(10,6,8,.92), rgba(10,6,8,.55) 70%, transparent);z-index:7}
+#hud .grp{display:flex;align-items:center;gap:8px}
+.hbtn{width:44px;height:44px;border-radius:12px;background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.16);
+  color:#fff;display:inline-flex;align-items:center;justify-content:center;transition:.15s}
+.hbtn:hover{background:rgba(255,255,255,.2)}
+.hbtn.primary{background:var(--accent);border-color:var(--accent);width:52px;height:52px}
+.hbtn.primary:hover{background:var(--plum)}
+#progress{flex:1;height:6px;border-radius:999px;background:rgba(255,255,255,.16);overflow:hidden;position:relative;cursor:pointer}
+#progress .fill{position:absolute;inset:0 auto 0 0;width:0%;background:linear-gradient(90deg,var(--accent),var(--plum));border-radius:999px}
+#meta{color:rgba(255,255,255,.8);font-size:12px;font-weight:600;min-width:110px;text-align:right}
+#dots{display:flex;gap:6px}
+#dots i{width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.28);transition:.2s;cursor:pointer}
+#dots i.done{background:var(--accent)}
+#dots i.cur{background:#fff;transform:scale(1.35)}
+
+/* ---------- SHARED SCENE PIECES ---------- */
+.card3d{position:absolute;background:#fff;border:1px solid var(--border);border-radius:20px;
+  box-shadow:0 30px 60px -20px rgba(0,0,0,.55);transform-style:preserve-3d}
+.paused .world *,.paused .world{animation-play-state:paused!important}
+
+/* phone */
+.phone{width:250px;height:500px;border-radius:36px;background:#1d1620;padding:10px;
+  box-shadow:0 40px 80px -20px rgba(0,0,0,.6), inset 0 0 0 2px #3a2c39}
+.phone .scr{width:100%;height:100%;border-radius:27px;background:var(--cream);overflow:hidden;position:relative}
+.phone .notch{position:absolute;top:8px;left:50%;transform:translateX(-50%);width:80px;height:16px;border-radius:999px;background:#1d1620;z-index:3}
+.mtop{background:var(--plum);color:#fff;padding:26px 14px 12px;font-size:12px;font-weight:700;display:flex;justify-content:space-between;align-items:center}
+.mtop small{font-weight:500;opacity:.8;font-size:9px}
+.mbody{padding:12px;display:flex;flex-direction:column;gap:10px}
+.mcard{background:#fff;border:1px solid var(--border);border-radius:14px;padding:10px}
+.mcard .lbl{font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.mcard .val{font-size:20px;font-weight:800;color:var(--navy)}
+.mcard .val.acc{color:var(--accent)}
+.mrow{display:flex;gap:8px}
+.mrow .mcard{flex:1}
+
+/* viewfinder / AR guide */
+.vf{position:absolute;inset:0;background:
+   linear-gradient(rgba(20,14,18,.25),rgba(20,14,18,.25)),
+   repeating-linear-gradient(0deg,#2a2029 0 12px,#241b23 12px 24px);}
+.vf .wall{position:absolute;inset:0;background:
+   radial-gradient(60% 40% at 62% 46%, rgba(120,90,70,.55), transparent 70%),
+   radial-gradient(30% 22% at 40% 60%, rgba(90,70,60,.5), transparent 70%),
+   linear-gradient(160deg,#cbb6a6,#a98f7e);}
+.frame{position:absolute;left:50%;top:50%;width:62%;height:56%;transform:translate(-50%,-50%);
+  border:2px solid rgba(255,255,255,.85);border-radius:14px}
+.frame:before,.frame:after{content:"";position:absolute;width:22px;height:22px;border:3px solid var(--accent)}
+.frame:before{left:-3px;top:-3px;border-right:none;border-bottom:none;border-radius:8px 0 0 0}
+.frame:after{right:-3px;bottom:-3px;border-left:none;border-top:none;border-radius:0 0 8px 0}
+.corner-tr,.corner-bl{position:absolute;width:22px;height:22px;border:3px solid var(--accent)}
+.corner-tr{right:-3px;top:-3px;border-left:none;border-bottom:none;border-radius:0 8px 0 0}
+.corner-bl{left:-3px;bottom:-3px;border-right:none;border-top:none;border-radius:0 0 0 8px}
+.scanline{position:absolute;left:6%;right:6%;height:3px;background:linear-gradient(90deg,transparent,var(--accent),transparent);
+  box-shadow:0 0 14px var(--accent);animation:scan 2.6s ease-in-out infinite}
+@keyframes scan{0%{top:24%}50%{top:74%}100%{top:24%}}
+.ar-tag{position:absolute;background:rgba(12,8,10,.78);border:1px solid rgba(255,255,255,.25);color:#fff;
+  font-size:10px;font-weight:700;border-radius:999px;padding:5px 10px;backdrop-filter:blur(4px);white-space:nowrap}
+.ar-tag.ok{border-color:var(--mint);color:#bfe6d4}
+.ar-ring{position:absolute;left:50%;top:50%;width:120px;height:120px;margin:-60px 0 0 -60px;border-radius:50%;
+  border:2px dashed rgba(255,255,255,.5);animation:spin 9s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.steady{position:absolute;left:50%;transform:translateX(-50%);bottom:14%;width:56%;height:6px;border-radius:999px;background:rgba(255,255,255,.25);overflow:hidden}
+.steady i{display:block;height:100%;width:0;background:var(--mint);animation:fill 4s linear infinite}
+@keyframes fill{to{width:100%}}
+.torch{position:absolute;left:50%;top:8%;width:0;height:0;border-left:70px solid transparent;border-right:70px solid transparent;
+  border-top:190px solid rgba(255,244,214,.30);transform:translateX(-50%);filter:blur(2px);animation:torchblink 3.2s infinite}
+@keyframes torchblink{0%,45%{opacity:0}55%,90%{opacity:1}100%{opacity:0}}
+
+/* pipeline steps */
+.steps{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);display:flex;gap:14px;align-items:stretch}
+.step{width:150px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);border-radius:16px;
+  padding:14px;color:#fff;opacity:.28;transform:translateY(10px);transition:.5s}
+.step.on{opacity:1;transform:translateY(0);background:rgba(185,149,173,.16);border-color:var(--accent);
+  box-shadow:0 0 30px rgba(185,149,173,.25)}
+.step .n{font-size:10px;font-weight:800;color:var(--accent);letter-spacing:.14em}
+.step .h{font-size:13px;font-weight:700;margin:6px 0 4px}
+.step .d{font-size:10px;line-height:1.45;color:rgba(255,255,255,.72)}
+.step .glyph{height:52px;margin-top:8px;border-radius:10px;background:rgba(0,0,0,.3);position:relative;overflow:hidden}
+
+/* heatmap */
+.heat{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(62vw,640px);aspect-ratio:4/3;
+  border-radius:16px;overflow:hidden;border:1px solid rgba(255,255,255,.2);
+  background:radial-gradient(50% 40% at 60% 45%, rgba(120,90,70,.6), transparent 70%),linear-gradient(160deg,#cbb6a6,#a08672)}
+.blob{position:absolute;border-radius:50%;filter:blur(6px);mix-blend-mode:screen;opacity:0;animation:reveal 3.4s ease forwards}
+@keyframes reveal{0%{opacity:0;transform:scale(.5)}40%{opacity:.95;transform:scale(1)}100%{opacity:.85;transform:scale(1.05)}}
+.bbox{position:absolute;border:2px solid #ffd166;border-radius:6px;opacity:0;animation:bb .6s ease forwards}
+@keyframes bb{to{opacity:1}}
+.bbox b{position:absolute;top:-20px;left:-2px;font-size:10px;color:#0b0709;background:#ffd166;border-radius:5px;padding:2px 6px;font-weight:800}
+
+/* spectrum */
+.spec{position:absolute;left:50%;top:54%;transform:translate(-50%,-50%);width:min(70vw,760px);height:46%;
+  background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.14);border-radius:16px;padding:16px}
+.spec .axis{position:absolute;left:16px;right:16px;bottom:34px;height:1px;background:rgba(255,255,255,.3)}
+.bars{position:absolute;left:16px;right:16px;bottom:35px;top:16px;display:flex;align-items:flex-end;gap:3px}
+.bars i{flex:1;background:linear-gradient(to top,var(--plum),var(--accent));border-radius:3px 3px 0 0;height:8%;
+  animation:bar 1.6s ease-in-out infinite alternate}
+@keyframes bar{from{transform:scaleY(.6)}to{transform:scaleY(1)}}
+.bars i{transform-origin:bottom}
+.peak{position:absolute;bottom:35px;width:4px;background:#ffd166;box-shadow:0 0 16px #ffd166;border-radius:2px;
+  animation:peakgrow 1.4s ease forwards;transform-origin:bottom}
+@keyframes peakgrow{from{height:0}to{height:78%}}
+.peaklbl{position:absolute;color:#ffd166;font-size:12px;font-weight:800}
+
+/* physics rays */
+.rays{position:absolute;left:50%;top:52%;transform:translate(-50%,-50%);display:flex;gap:40px}
+.raybox{width:min(34vw,340px);background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.14);border-radius:16px;padding:16px;color:#fff}
+.raybox h4{font-size:13px;font-weight:800;margin-bottom:4px}
+.raybox p{font-size:10px;color:rgba(255,255,255,.7);line-height:1.45}
+.raybox .diagram{height:150px;margin-top:10px;position:relative;border-radius:10px;overflow:hidden;
+  background:linear-gradient(160deg,#b7a08e,#8f7663)}
+.ray{position:absolute;height:3px;border-radius:2px;transform-origin:left center}
+.ray.in{background:#ffe9a8;left:8%;top:18%;width:52%;transform:rotate(28deg);box-shadow:0 0 10px #ffe9a8}
+.ray.out{background:#ffd166;left:56%;top:44%;width:46%;box-shadow:0 0 12px #ffd166;animation:shoot 1.8s ease-in-out infinite}
+@keyframes shoot{0%{opacity:.2;transform:scaleX(.2)}60%{opacity:1;transform:scaleX(1)}100%{opacity:.2;transform:scaleX(1)}}
+.scatter{position:absolute;left:56%;top:44%;width:6px;height:6px;border-radius:50%;background:#ffe9a8;animation:sc 1.6s ease-out infinite}
+@keyframes sc{0%{opacity:1;transform:translate(0,0) scale(1)}100%{opacity:0;transform:translate(var(--dx),var(--dy)) scale(.4)}}
+.stat{display:flex;justify-content:space-between;font-size:10px;margin-top:8px;color:rgba(255,255,255,.85)}
+.stat b{color:#ffd166}
+
+/* dewpoint gauge */
+.dew{position:absolute;left:50%;top:52%;transform:translate(-50%,-50%);width:min(64vw,620px);
+  background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.14);border-radius:16px;padding:20px;color:#fff}
+.gauge{position:relative;height:64px;border-radius:12px;background:linear-gradient(90deg,#4A8B71,#B86B35 62%,#C84661);overflow:hidden}
+.gauge .mark{position:absolute;top:-6px;bottom:-6px;width:3px;background:#fff;box-shadow:0 0 12px #fff}
+.gauge .mark.temp{left:74%}
+.gauge .mark.dewp{left:74%;background:#8fd3ff;box-shadow:0 0 12px #8fd3ff;animation:close 4s ease-in-out infinite alternate}
+@keyframes close{from{left:40%}to{left:70%}}
+.gauge .lbl{position:absolute;bottom:6px;font-size:10px;font-weight:800;color:rgba(255,255,255,.9)}
+.formula{margin-top:16px;font-size:12px;color:rgba(255,255,255,.85);background:rgba(0,0,0,.3);border-radius:10px;padding:10px 12px;font-family:ui-monospace,Menlo,Consolas,monospace}
+
+/* fusion */
+.fuse{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);display:flex;align-items:center;gap:26px}
+.chan{width:150px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.16);border-radius:16px;padding:14px;color:#fff;text-align:center}
+.chan .ic{font-size:22px}
+.chan .h{font-size:12px;font-weight:800;margin-top:6px}
+.chan .d{font-size:9px;color:rgba(255,255,255,.7);margin-top:3px}
+.arrow{color:var(--accent);font-size:26px;animation:nudge 1.4s ease-in-out infinite}
+@keyframes nudge{0%,100%{transform:translateX(0)}50%{transform:translateX(8px)}}
+.score{width:190px;background:linear-gradient(160deg,var(--plum),var(--plum-d));border-radius:20px;padding:20px;color:#fff;text-align:center;
+  box-shadow:0 0 50px rgba(185,149,173,.4)}
+.score .v{font-size:46px;font-weight:900;letter-spacing:-.03em}
+.score .l{font-size:10px;letter-spacing:.18em;text-transform:uppercase;opacity:.85;font-weight:700}
+.refs{position:absolute;left:50%;bottom:6%;transform:translateX(-50%);width:min(80vw,860px);color:rgba(255,255,255,.78);
+  font-size:10px;line-height:1.7;text-align:center}
+.refs b{color:#fff}
+
+/* dashboard mini */
+.dash{width:min(46vw,520px);background:#fff;border-radius:18px;border:1px solid var(--border);padding:16px;
+  box-shadow:0 40px 80px -24px rgba(0,0,0,.6)}
+.dash .dh{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.dash .dh b{font-size:13px;color:var(--navy)}
+.dash .dh span{font-size:9px;font-weight:700;color:var(--mint);background:#EFF8F3;border-radius:999px;padding:3px 8px}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.kpi{background:var(--cream);border:1px solid var(--border);border-radius:12px;padding:8px}
+.kpi .l{font-size:8px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.kpi .v{font-size:18px;font-weight:800;color:var(--navy)}
+.kpi.c .v{color:var(--crit)}
+.minichart{margin-top:10px;display:flex;align-items:flex-end;gap:6px;height:64px}
+.minichart i{flex:1;border-radius:4px 4px 0 0;background:linear-gradient(to top,var(--accent),var(--plum));animation:bar 2s ease-in-out infinite alternate;transform-origin:bottom}
+.countdown{margin-top:10px;background:#FDF2F4;border:1px solid rgba(200,70,97,.3);border-radius:12px;padding:8px 10px;
+  display:flex;justify-content:space-between;align-items:center}
+.countdown .t{font-size:9px;font-weight:700;color:var(--crit)}
+.countdown .c{font-size:15px;font-weight:900;color:var(--crit);font-variant-numeric:tabular-nums}
+
+/* wall cross-section (scene 1) */
+.wallx{position:absolute;left:50%;top:52%;transform:translate(-50%,-50%);width:min(66vw,680px);height:52%;
+  border-radius:16px;overflow:hidden;border:1px solid rgba(255,255,255,.16);display:flex}
+.layer{position:relative;flex:1}
+.layer .tag{position:absolute;left:8px;top:8px;font-size:9px;font-weight:800;color:rgba(255,255,255,.85);
+  background:rgba(0,0,0,.35);border-radius:6px;padding:3px 7px}
+.l-paint{background:linear-gradient(180deg,#e8ddd2,#d9cabb);flex:.5}
+.l-dry{background:linear-gradient(180deg,#cbb6a4,#b39c89);flex:1}
+.l-cav{background:linear-gradient(180deg,#3b2f2a,#2a211d);flex:.7}
+.l-brick{background:repeating-linear-gradient(0deg,#8a5f4c 0 18px,#6f4b3b 18px 20px);flex:1}
+.wet{position:absolute;border-radius:50%;background:radial-gradient(circle,#2f6f8f 0%,#3d5a75 45%,transparent 72%);
+  filter:blur(3px);animation:grow 5s ease-in-out infinite alternate}
+@keyframes grow{from{transform:scale(.6);opacity:.55}to{transform:scale(1.15);opacity:.95}}
+.bubble{position:absolute;border-radius:50%;background:radial-gradient(circle at 35% 30%,#f4ece2,#cdb8a4);
+  box-shadow:0 2px 6px rgba(0,0,0,.3);animation:bub 4s ease-in-out infinite alternate}
+@keyframes bub{from{transform:scale(.7)}to{transform:scale(1.1)}}
+.clock24{position:absolute;right:5%;top:12%;width:130px;height:130px;border-radius:50%;
+  background:conic-gradient(var(--crit) 0 62%, rgba(255,255,255,.15) 62% 100%);display:flex;align-items:center;justify-content:center;
+  animation:tick 6s linear infinite}
+@keyframes tick{to{filter:hue-rotate(0deg)}}
+.clock24 .in{width:104px;height:104px;border-radius:50%;background:#160f14;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff}
+.clock24 .in b{font-size:26px;font-weight:900;color:var(--crit)}
+.clock24 .in span{font-size:8px;letter-spacing:.14em;text-transform:uppercase;opacity:.8}
+
+/* ---------- ACT II: faithful app-shell recreation ---------- */
+.appframe{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(90vw,1100px);height:min(76vh,660px);
+  background:var(--cream);border-radius:18px;overflow:hidden;display:flex;border:1px solid rgba(255,255,255,.25);
+  box-shadow:0 40px 90px -30px rgba(0,0,0,.7)}
+.sb{width:206px;background:var(--lav);border-right:1px solid var(--border);padding:12px 10px;display:flex;flex-direction:column;gap:3px;overflow:hidden}
+.sb .brand{display:flex;gap:8px;align-items:center;padding:4px 8px 12px}
+.sb .brand .lg{width:28px;height:28px;border-radius:9px;background:var(--plum);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800}
+.sb .brand b{font-size:12px;color:var(--navy)}
+.sbitem{display:flex;justify-content:space-between;align-items:center;gap:6px;font-size:10.5px;font-weight:600;color:var(--navy);padding:7px 9px;border-radius:9px}
+.sbitem.on{background:var(--plum);color:#fff;box-shadow:0 4px 12px -4px rgba(121,86,111,.6)}
+.sbitem .bp{font-size:8px;font-weight:800;background:#D8C4D0;color:var(--navy);border-radius:999px;padding:2px 7px;white-space:nowrap}
+.sbitem.on .bp{background:rgba(255,255,255,.22);color:#fff}
+.tn{height:44px;background:#fff;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;padding:0 14px}
+.tn .search{flex:1;max-width:300px;background:var(--cream);border:1px solid var(--border);border-radius:10px;font-size:10px;color:var(--muted);padding:7px 10px}
+.tn .role{margin-left:auto;font-size:9px;font-weight:800;color:var(--navy);background:#EFE4EC;border:1px solid var(--border);border-radius:999px;padding:5px 10px;white-space:nowrap}
+.main{flex:1;display:flex;flex-direction:column;min-width:0}
+.content{flex:1;padding:14px;overflow:hidden;position:relative}
+.kgrid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+.k{background:#fff;border:1px solid var(--border);border-radius:12px;padding:9px;animation:rise .5s ease both}
+.k .l{font-size:8px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.k .v{font-size:19px;font-weight:900;color:var(--navy)}
+.k.red .v{color:var(--crit)}
+@keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.pie{width:118px;height:118px;border-radius:50%;background:conic-gradient(var(--crit) 0 25%,var(--warn) 25% 50%,var(--accent) 50% 75%,var(--mint) 75% 100%);position:relative;animation:spinin 1s ease both}
+.pie:after{content:"";position:absolute;inset:26px;border-radius:50%;background:#fff}
+@keyframes spinin{from{transform:rotate(-90deg) scale(.6);opacity:0}to{transform:none;opacity:1}}
+.tbl{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.tbl th{font-size:8px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);text-align:left;padding:8px 10px;border-bottom:1px solid var(--border)}
+.tbl td{font-size:10px;color:var(--navy);padding:8px 10px;border-bottom:1px solid var(--border);font-weight:600}
+.tbl tr{animation:rise .45s ease both}
+.pill{font-size:8px;font-weight:800;border-radius:999px;padding:3px 8px;color:#fff}
+.pill.c{background:var(--crit)}.pill.h{background:var(--warn)}.pill.m{background:var(--accent)}.pill.l{background:var(--mint)}
+.cursor{position:absolute;width:15px;height:15px;z-index:9;pointer-events:none;
+  background:radial-gradient(circle at 35% 30%,#fff,#d9c9d6);border:1.5px solid var(--plum);border-radius:50% 50% 50% 0;transform:rotate(-45deg)}
+.cursor.click:after{content:"";position:absolute;inset:-10px;border:2px solid var(--accent);border-radius:50%;animation:ring .9s ease-out infinite}
+@keyframes ring{from{transform:scale(.4);opacity:1}to{transform:scale(1.5);opacity:0}}
+.modal{position:absolute;inset:8% 16%;background:#fff;border:1px solid var(--border);border-radius:16px;
+  box-shadow:0 30px 70px -20px rgba(0,0,0,.5);padding:14px;animation:pop .35s ease both;z-index:5}
+@keyframes pop{from{opacity:0;transform:scale(.9)}to{opacity:1;transform:none}}
+.flow{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.fstep{font-size:9px;font-weight:800;border-radius:999px;padding:6px 10px;background:#fff;border:1px solid var(--border);color:var(--muted)}
+.fstep.done{background:var(--mint);border-color:var(--mint);color:#fff}
+.fstep.cur{background:var(--plum);border-color:var(--plum);color:#fff;animation:pulse 1.6s infinite}
+.farrow{color:var(--muted);font-size:10px}
+.slidein{animation:slidein .5s ease both}
+@keyframes slidein{from{opacity:0;transform:translateX(26px)}to{opacity:1;transform:none}}
+
+/* float animations */
+.float{animation:float 6s ease-in-out infinite}
+@keyframes float{0%,100%{transform:translateY(0) rotateY(-8deg)}50%{transform:translateY(-14px) rotateY(-4deg)}}
+.float2{animation:float2 7s ease-in-out infinite}
+@keyframes float2{0%,100%{transform:translateY(0) rotateY(10deg)}50%{transform:translateY(-10px) rotateY(6deg)}}
+</style>
+</head>
+<body>
+
+<!-- ============ LANDING ============ -->
+<div id="app">
+  <div class="hero">
+    <div class="badge"><span class="dot"></span> PropCare NW · Interactive Demo Film</div>
+    <h1>Detect Early. <span class="a">Prevent Damage.</span><br/>Protect Properties.</h1>
+    <p class="sub">A guided cinematic walkthrough of the PropCare NW mobile field app and operations
+      dashboard — the physics, the signal processing, and the statutory compliance engine behind
+      predictive property intelligence.</p>
+    <div class="cta">
+      <button class="btn-primary" id="startBtn">▶&nbsp; Start Film (Fullscreen + Voice-over)</button>
+      <button class="btn-ghost" id="silentBtn">Watch without voice</button>
+    </div>
+    <div class="opts">
+      <button class="chip" id="tgSubs" aria-pressed="true"><span class="sw"></span>Subtitles</button>
+      <button class="chip" id="tgVoice" aria-pressed="true"><span class="sw"></span>Voice-over</button>
+      <button class="chip" id="tgTilt" aria-pressed="true"><span class="sw"></span>3D tilt (move pointer)</button>
+    </div>
+    <div class="scenes-preview" id="sceneChips"></div>
+    <p class="fineprint">Best experienced fullscreen with sound. Runs entirely offline in this single HTML file.
+      Press <b>Esc</b> to exit fullscreen · <b>Space</b> pause · <b>←/→</b> scenes.</p>
+  </div>
+</div>
+
+<!-- ============ FILM ============ -->
+<div id="film">
+  <div id="stage"><div class="world" id="world"></div><div class="vignette"></div></div>
+  <div class="scene-title"><div class="k" id="sKick"></div><div class="t" id="sTitle"></div></div>
+  <div class="cite" id="sCite"></div>
+  <div id="subs"><div class="line" id="subLine"></div></div>
+  <div id="hud">
+    <div class="grp">
+      <button class="hbtn" id="btnExit" title="Exit film">✕</button>
+      <button class="hbtn" id="btnPrev" title="Previous scene">⏮</button>
+      <button class="hbtn primary" id="btnPlay" title="Play / pause"></button>
+      <button class="hbtn" id="btnNext" title="Next scene">⏭</button>
+    </div>
+    <div id="dots"></div>
+    <div id="progress"><div class="fill" id="pfill"></div></div>
+    <div class="grp">
+      <button class="hbtn" id="btnSubs" title="Toggle subtitles">CC</button>
+      <button class="hbtn" id="btnVoice" title="Toggle voice">🔊</button>
+      <div id="meta">Scene 1 / 10</div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* Injected at build time: { "0": "data:audio/mpeg;base64,...", ... } */
+var AUDIO_MANIFEST = __AUDIO_MANIFEST__;
+
+/* ------------------------------------------------------------------ */
+/* NARRATION (must match generated voice-over clips)                   */
+/* ------------------------------------------------------------------ */
+var SCENES = [
+{
+  kick:"The Problem", title:"Hidden moisture destroys homes before anyone sees it",
+  cite:["Awaab's Law 2023 · emergency hazards 24h"],
+  narration:"Every year, hidden moisture destroys social housing long before anyone sees a stain. Water accumulates silently behind drywall and inside cavities for months. By the time paint bubbles, the structure is already compromised, and under Awaab's Law, landlords now face a twenty-four hour statutory clock.",
+  render:function(){return `
+    <div class="wallx">
+      <div class="layer l-paint"><span class="tag">PAINT / FINISH</span>
+        <div class="bubble" style="left:52%;top:58%;width:34px;height:26px"></div>
+        <div class="bubble" style="left:60%;top:66%;width:22px;height:18px;animation-delay:.8s"></div>
+      </div>
+      <div class="layer l-dry"><span class="tag">DRYWALL</span>
+        <div class="wet" style="left:38%;top:46%;width:120px;height:90px"></div>
+      </div>
+      <div class="layer l-cav"><span class="tag">CAVITY</span>
+        <div class="wet" style="left:20%;top:30%;width:90px;height:120px;animation-delay:1.2s"></div>
+      </div>
+      <div class="layer l-brick"><span class="tag">MASONRY</span>
+        <div class="wet" style="left:30%;top:55%;width:110px;height:80px;animation-delay:.5s"></div>
+      </div>
+    </div>
+    <div class="clock24"><div class="in"><b>24:00:00</b><span>Awaab SLA</span></div></div>`;}
+},
+{
+  kick:"The Platform", title:"A mobile field app, fused into an operations dashboard",
+  cite:[],
+  narration:"PropCare NW is a mobile field app paired with an operations dashboard. The phone captures three independent physical signals on site. The dashboard fuses them into one explainable risk score for every unit in the portfolio.",
+  render:function(){return `
+    <div style="position:absolute;left:16%;top:50%;transform:translateY(-50%)" class="float">
+      <div class="phone"><div class="scr"><div class="notch"></div>
+        <div class="mtop"><span>PropCare NW</span><small>Field Inspector</small></div>
+        <div class="mbody">
+          <div class="mcard"><div class="lbl">Live Wall Moisture</div><div class="val acc">24.8% WME</div></div>
+          <div class="mrow">
+            <div class="mcard"><div class="lbl">Risk Index</div><div class="val">86</div></div>
+            <div class="mcard"><div class="lbl">Acoustic</div><div class="val">2.4k</div></div>
+          </div>
+          <div class="mcard"><div class="lbl">Guided Capture</div>
+            <div style="height:70px;border-radius:10px;margin-top:6px;position:relative;overflow:hidden" class="vf">
+              <div class="wall"></div><div class="frame"></div><div class="scanline"></div>
+            </div>
+          </div>
+        </div>
+      </div></div>
+    </div>
+    <div style="position:absolute;right:8%;top:50%;transform:translateY(-50%)" class="float2">
+      <div class="dash">
+        <div class="dh"><b>Portfolio Command</b><span>● LIVE</span></div>
+        <div class="kpis">
+          <div class="kpi"><div class="l">Portfolio</div><div class="v">8</div></div>
+          <div class="kpi c"><div class="l">Critical</div><div class="v">2</div></div>
+          <div class="kpi"><div class="l">Open WO</div><div class="v">6</div></div>
+          <div class="kpi"><div class="l">Contractors</div><div class="v">3</div></div>
+        </div>
+        <div class="minichart"><i style="height:40%"></i><i style="height:55%"></i><i style="height:48%"></i><i style="height:70%"></i><i style="height:86%"></i><i style="height:100%"></i></div>
+        <div class="countdown"><span class="t">AWAAB 24h · Deansgate 4B</span><span class="c">18:12:44</span></div>
+      </div>
+    </div>`;}
+},
+{
+  kick:"Guided Capture · Optical", title:"Two shots, one alignment: ambient then flash",
+  cite:["Feris et al. 2004 · multi-flash specular imaging"],
+  narration:"Optical capture is a guided two-shot pair. Hold the phone about thirty centimetres from the wall, square to the surface. First shot: room light only, torch off. Second shot: identical frame with the torch on. The overlay keeps you aligned and steady.",
+  render:function(){return `
+    <div class="vf">
+      <div class="wall"></div>
+      <div class="torch"></div>
+      <div class="frame"><span class="corner-tr"></span><span class="corner-bl"></span></div>
+      <div class="ar-ring"></div>
+      <div class="scanline"></div>
+      <div class="ar-tag" style="left:8%;top:12%">① AMBIENT · torch OFF</div>
+      <div class="ar-tag ok" style="right:8%;top:12%">② FLASH · torch ON</div>
+      <div class="ar-tag" style="left:50%;transform:translateX(-50%);top:20%">↕ 30 cm standoff</div>
+      <div class="ar-tag ok" style="left:50%;transform:translateX(-50%);bottom:24%">⊥ 90° to surface</div>
+      <div class="steady"><i></i></div>
+      <div class="ar-tag" style="left:50%;transform:translateX(-50%);bottom:8%">HOLD STEADY…</div>
+    </div>`;}
+},
+{
+  kick:"Guided Capture · Acoustic", title:"Listen for the micro-weep the ear cannot hear",
+  cite:["AIDIC CET 2013 · FFT leak spectra","Gao et al. · leak-noise correlation"],
+  narration:"Acoustic capture listens for micro-leaks. Place the microphone against the surface, two to five centimetres from the suspected pipe run. Keep the room silent and record five seconds. Escaping water under pressure radiates a high-frequency hiss that human ears miss.",
+  render:function(){return `
+    <div class="vf" style="background:linear-gradient(160deg,#241b23,#191219)">
+      <div class="wall" style="opacity:.35"></div>
+      <div style="position:absolute;left:50%;top:46%;transform:translate(-50%,-50%);width:110px;height:110px;border-radius:50%;
+        background:radial-gradient(circle,#3a2c39,#1d1620);border:2px solid var(--accent);display:flex;align-items:center;justify-content:center;font-size:34px">🎙</div>
+      <div class="ar-ring" style="width:170px;height:170px;margin:-85px 0 0 -85px"></div>
+      <div class="ar-tag" style="left:50%;transform:translateX(-50%);top:64%">mic 2–5 cm from pipe run</div>
+      <div class="ar-tag ok" style="left:10%;top:14%">🔇 room silent</div>
+      <div class="ar-tag" style="right:10%;top:14%">⏺ REC 0:05</div>
+      <div style="position:absolute;left:12%;right:12%;bottom:20%;height:60px;display:flex;align-items:center;gap:3px">
+        ${Array.from({length:64}).map((_,i)=>`<i style="flex:1;background:var(--accent);border-radius:2px;height:${8+Math.abs(Math.sin(i*0.5))*70}%;opacity:.85;animation:bar ${1+ (i%5)*0.22}s ease-in-out infinite alternate;transform-origin:center"></i>`).join("")}
+      </div>
+      <div class="ar-tag" style="left:50%;transform:translateX(-50%);bottom:8%">pressurised weep ≈ 1–4 kHz band</div>
+    </div>`;}
+},
+{
+  kick:"OpenCV · Alignment & Subtraction", title:"Align, normalise, subtract: isolate the specular spike",
+  cite:["Lowe 2004 · SIFT","Fischler & Bolles 1981 · RANSAC","OpenCV · Bradski 2000"],
+  narration:"OpenCV aligns the two photos with SIFT keypoints and a RANSAC homography, then normalises lightness in CIE LAB space so the torch adds nothing to dry substrate. Subtracting ambient from flash isolates specular reflection, which spikes exactly where water sits near the surface.",
+  render:function(){return `
+    <div class="steps">
+      <div class="step" data-on="0"><div class="n">STEP 1</div><div class="h">SIFT keypoints</div>
+        <div class="d">Scale-invariant features matched across the ambient and flash frames.</div>
+        <div class="glyph">${Array.from({length:14}).map((_,i)=>`<span style="position:absolute;left:${6+ (i*7)%88}%;top:${10+(i*13)%80}%;width:5px;height:5px;border-radius:50%;background:#ffd166;box-shadow:0 0 8px #ffd166"></span>`).join("")}</div></div>
+      <div class="step" data-on="1"><div class="n">STEP 2</div><div class="h">RANSAC homography</div>
+        <div class="d">Robust transform rejects outliers; flash frame warped into ambient space.</div>
+        <div class="glyph"><span style="position:absolute;inset:14% 18%;border:2px dashed #8fd3ff;border-radius:6px"></span><span style="position:absolute;inset:20% 12%;border:2px solid var(--accent);border-radius:6px"></span></div></div>
+      <div class="step" data-on="2"><div class="n">STEP 3</div><div class="h">CIE LAB L* norm</div>
+        <div class="d">Background lightness equalised so torch gain cancels on dry material.</div>
+        <div class="glyph"><span style="position:absolute;left:8%;right:8%;top:40%;height:8px;border-radius:4px;background:linear-gradient(90deg,#111,#fff)"></span></div></div>
+      <div class="step" data-on="3"><div class="n">STEP 4</div><div class="h">Δ = flash − ambient</div>
+        <div class="d">Specular difference field; dry substrate → ~0, wet substrate → strong.</div>
+        <div class="glyph"><span style="position:absolute;left:20%;top:20%;width:34px;height:26px;border-radius:50%;background:#ff5d5d;filter:blur(4px)"></span></div></div>
+    </div>`;}
+},
+{
+  kick:"OpenCV · Anomaly Extraction", title:"From difference field to a false-colour heatmap",
+  cite:["OpenCV · connected components","COLORMAP_JET"],
+  narration:"Adaptive thresholding and morphological cleaning remove sensor noise. Connected components become candidate anomalies with area, centroid and severity. The difference field is mapped to a JET false-colour heatmap and blended back over the photo for the inspector.",
+  render:function(){return `
+    <div class="heat">
+      <div class="scanline"></div>
+      <div class="blob" style="left:52%;top:38%;width:34%;height:34%;background:radial-gradient(circle,#ff2d2d 0%,#ff9d2d 40%,#2dd4bf00 72%)"></div>
+      <div class="blob" style="left:24%;top:58%;width:22%;height:24%;background:radial-gradient(circle,#ffd166 0%,#ff9d2d55 50%,transparent 72%);animation-delay:.7s"></div>
+      <div class="bbox" style="left:50%;top:36%;width:38%;height:38%"><b>SEVERE · 0.91</b></div>
+      <div class="bbox" style="left:22%;top:56%;width:26%;height:28%;animation-delay:.9s"><b>MODERATE · 0.54</b></div>
+      <div class="ar-tag ok" style="left:4%;bottom:4%">area 0.42 m² · centroid (x̄,ȳ) · JET α-blend 35%</div>
+    </div>`;}
+},
+{
+  kick:"Acoustic DSP", title:"Band-pass, FFT, Welch PSD: find the narrowband leak peak",
+  cite:["Welch 1967 · PSD estimator","SciPy signal"],
+  narration:"The acoustic branch filters the recording with a Butterworth band-pass, then takes a real FFT and a Welch power spectral density. A pressurised micro-weep shows a narrowband peak, here near two point four kilohertz, distinct from broad ambient noise.",
+  render:function(){return `
+    <div class="spec">
+      <div style="font-size:11px;font-weight:800;color:var(--accent);letter-spacing:.14em">POWER SPECTRAL DENSITY (Welch)</div>
+      <div class="bars">${Array.from({length:56}).map((_,i)=>{
+          const h = 8 + 40*Math.exp(-Math.pow((i-34)/6,2)) + (i%3)*4;
+          return `<i style="height:${Math.min(h,70)}%;animation-delay:${(i%7)*0.13}s"></i>`;}).join("")}
+      </div>
+      <div class="peak" style="left:63%"></div>
+      <div class="peaklbl" style="left:64%;top:12%">2.4 kHz · micro-weep</div>
+      <div class="axis"></div>
+      <div style="position:absolute;left:16px;bottom:12px;font-size:9px;color:rgba(255,255,255,.6)">0 Hz</div>
+      <div style="position:absolute;right:16px;bottom:12px;font-size:9px;color:rgba(255,255,255,.6)">8 kHz</div>
+      <div class="ar-tag" style="left:16px;top:14px">broadband = ambient noise</div>
+    </div>`;}
+},
+{
+  kick:"The Physics", title:"Why flash reveals water: specular vs diffuse reflection",
+  cite:["Feris et al. 2004","dielectric ε: water ≈ 80 vs dry ≈ 3"],
+  narration:"Why does flash reveal water? Wet substrate has a smoother, more specular surface and a higher refractive index than dry porous material, so it reflects the torch straight back at the lens. Dry matte substrate scatters light diffusely and disappears after normalisation.",
+  render:function(){return `
+    <div class="rays">
+      <div class="raybox"><h4>WET substrate → specular</h4>
+        <p>Water fills pores, raising refractive index and smoothing the surface. Torch light mirrors back to the lens → bright in the flash frame.</p>
+        <div class="diagram">
+          <div class="ray in"></div><div class="ray out" style="transform:rotate(-28deg)"></div>
+          <div style="position:absolute;left:52%;top:40%;width:26px;height:18px;border-radius:50%;background:radial-gradient(circle,#2f6f8f,transparent 70%)"></div>
+        </div>
+        <div class="stat"><span>n ≈ 1.33 (water)</span><b>Δ bright</b></div>
+      </div>
+      <div class="raybox"><h4>DRY substrate → diffuse</h4>
+        <p>Air-filled porous material scatters the torch in every direction. After L* normalisation the flash adds ~nothing → cancels in Δ.</p>
+        <div class="diagram">
+          <div class="ray in"></div>
+          <span class="scatter" style="--dx:40px;--dy:-30px"></span>
+          <span class="scatter" style="--dx:52px;--dy:-6px;animation-delay:.3s"></span>
+          <span class="scatter" style="--dx:36px;--dy:18px;animation-delay:.6s"></span>
+          <span class="scatter" style="--dx:20px;--dy:-42px;animation-delay:.9s"></span>
+        </div>
+        <div class="stat"><span>n ≈ 1.0 (air)</span><b>Δ ≈ 0</b></div>
+      </div>
+    </div>`;}
+},
+{
+  kick:"Psychrometrics", title:"Dew point margin: predicting condensation before it forms",
+  cite:["Magnus–Tetens / Alduchov & Eskridge 1996","Open-Meteo"],
+  narration:"Weather intelligence adds the third signal. Using the Magnus-Tetens formulation, we compute dew point from live temperature and humidity. When surface temperature falls within a few degrees of dew point, condensation and mould germination become likely.",
+  render:function(){return `
+    <div class="dew">
+      <div style="font-size:11px;font-weight:800;letter-spacing:.14em;color:var(--accent)">DEW POINT MARGIN</div>
+      <div class="gauge" style="margin-top:12px">
+        <div class="mark dewp"></div><div class="mark temp"></div>
+        <span class="lbl" style="left:6%">SAFE &gt;6°C</span>
+        <span class="lbl" style="left:44%">WATCH 3°C</span>
+        <span class="lbl" style="right:4%">CONDENSE</span>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:14px">
+        <div class="kpi" style="flex:1;background:rgba(0,0,0,.3);border-color:rgba(255,255,255,.15)"><div class="l" style="color:rgba(255,255,255,.7)">Air temp</div><div class="v" style="color:#fff">11.4°C</div></div>
+        <div class="kpi" style="flex:1;background:rgba(0,0,0,.3);border-color:rgba(255,255,255,.15)"><div class="l" style="color:rgba(255,255,255,.7)">RH</div><div class="v" style="color:#fff">92%</div></div>
+        <div class="kpi" style="flex:1;background:rgba(0,0,0,.3);border-color:rgba(255,255,255,.15)"><div class="l" style="color:rgba(255,255,255,.7)">Dew point</div><div class="v" style="color:#8fd3ff">10.2°C</div></div>
+        <div class="kpi c" style="flex:1;background:rgba(200,70,97,.15);border-color:rgba(200,70,97,.4)"><div class="l" style="color:#f3b6c2">Margin</div><div class="v">1.2°C</div></div>
+      </div>
+      <div class="formula">γ(T,RH) = ln(RH/100) + (b·T)/(c+T) &nbsp;→&nbsp; Td = c·γ/(b−γ) &nbsp; (b=17.62, c=243.12°C)</div>
+    </div>`;}
+},
+{
+  kick:"Fusion & Provenance", title:"Three physics channels, one explainable risk score",
+  cite:["YOLOv8 · Jocher et al. 2023","Lowe 2004","Fischler & Bolles 1981","Welch 1967","Bradski 2000"],
+  narration:"All three channels fuse into one explainable triage score that drives statutory deadlines and contractor dispatch. The method stands on published work: Lowe's SIFT, Fischler and Bolles' RANSAC, Welch's spectral estimator, and OpenCV. PropCare NW: detect early, prevent damage, protect properties.",
+  render:function(){return `
+    <div class="fuse">
+      <div class="chan"><div class="ic">📷</div><div class="h">Optical Δ</div><div class="d">specular difference heatmap</div></div>
+      <div class="chan"><div class="ic">🎙</div><div class="h">Acoustic PSD</div><div class="d">narrowband leak peak</div></div>
+      <div class="chan"><div class="ic">🌦</div><div class="h">Psychrometric</div><div class="d">dew point margin</div></div>
+      <div class="arrow">➜</div>
+      <div class="score"><div class="v">86</div><div class="l">Explainable Risk</div></div>
+    </div>
+    <div class="refs"><b>Research provenance —</b>
+      Lowe, D.G. (2004) <i>Distinctive Image Features from Scale-Invariant Keypoints</i> ·
+      Fischler &amp; Bolles (1981) <i>RANSAC</i>, CACM ·
+      Welch, P.D. (1967) <i>Use of Fast Fourier Transform for PSD Estimation</i>, IEEE Trans. Audio ·
+      Feris et al. (2004) <i>Specular Reflection Reduction with Multi-Flash Imaging</i> ·
+      Bradski (2000) <i>The OpenCV Library</i> ·
+      Jocher et al. (2023) <i>Ultralytics YOLOv8</i> ·
+      AIDIC CET (2013) <i>Spectral Analysis for Detection of Leaks in Pipes</i> ·
+      Alduchov &amp; Eskridge (1996) <i>Improved Magnus coefficients</i> ·
+      Awaab's Law, Housing Act (2023).
+    </div>`;}
+}
+];
+
+/* ------------------------------------------------------------------ */
+/* ENGINE                                                              */
+/* ------------------------------------------------------------------ */
+var film=document.getElementById('film'), world=document.getElementById('world'),
+    stage=document.getElementById('stage'), subsEl=document.getElementById('subs'),
+    subLine=document.getElementById('subLine'), pfill=document.getElementById('pfill'),
+    meta=document.getElementById('meta'), dots=document.getElementById('dots'),
+    sKick=document.getElementById('sKick'), sTitle=document.getElementById('sTitle'),
+    sCite=document.getElementById('sCite');
+
+var state={i:0, playing:false, voice:true, subs:true, tilt:true, muted:false,
+           audio:null, t0:0, elapsed:0, cues:[], cueIdx:0, raf:null, estDur:0};
+
+/* landing chips */
+document.getElementById('sceneChips').innerHTML =
+  SCENES.map(function(s,i){return `<span class="sp">${i+1}. ${s.kick}</span>`;}).join('');
+dots.innerHTML = SCENES.map(function(_,i){return `<i data-i="${i}"></i>`;}).join('');
+dots.addEventListener('click',function(e){var t=e.target.closest('i');if(t)go(+t.dataset.i);});
+
+function estSeconds(text){ return Math.max(6, text.length/15.5); } // ~15.5 chars/sec speech
+
+function buildCues(text){
+  var parts=text.match(/[^.!?]+[.!?]?/g)||[text];
+  var total=parts.join('').length||1, acc=0;
+  return parts.map(function(p){var f=p.length/total;var c={t:p.trim(),from:acc,to:acc+f};acc+=f;return c;});
+}
+
+function loadAudio(i){
+  var uri=AUDIO_MANIFEST[String(i)];
+  if(!uri) return null;
+  var a=new Audio(uri); a.preload='auto'; return a;
+}
+
+function renderScene(i){
+  var s=SCENES[i];
+  world.innerHTML=s.render();
+  sKick.textContent=s.kick; sTitle.textContent=s.title;
+  sCite.innerHTML=(s.cite||[]).map(function(c){return `<span>${c}</span>`;}).join('');
+  meta.textContent='Scene '+(i+1)+' / '+SCENES.length;
+  Array.prototype.forEach.call(dots.children,function(d,k){
+    d.className = k<i?'done':(k===i?'cur':'');
+  });
+  // sequential step reveal for pipeline scene
+  if(i===4){
+    var steps=world.querySelectorAll('.step');
+    steps.forEach(function(st,k){ setTimeout(function(){st.classList.add('on');}, 500+k*1500); });
+  }
+}
+
+function startScene(i){
+  state.i=i; state.cueIdx=0; state.elapsed=0;
+  renderScene(i);
+  state.cues=buildCues(SCENES[i].narration);
+  if(state.audio){ state.audio.pause(); state.audio=null; }
+  if(state.voice && !state.muted){
+    state.audio=loadAudio(i);
+    if(state.audio){
+      state.audio.play().catch(function(){ state.audio=null; });
+    }
+  }
+  state.t0=performance.now();
+  state.estDur = state.audio ? null : estSeconds(SCENES[i].narration);
+  loop();
+}
+
+function loop(){
+  cancelAnimationFrame(state.raf);
+  function frame(){
+    if(!state.playing) return;
+    var cur;
+    if(state.audio && !state.audio.paused && state.audio.duration){ cur=state.audio.currentTime; }
+    else { cur=state.elapsed + (performance.now()-state.t0)/1000; }
+    var dur = state.audio && state.audio.duration ? state.audio.duration : (state.estDur||estSeconds(SCENES[i0()]));
+    // subtitles
+    if(state.subs){
+      var frac=Math.min(1,cur/dur);
+      var cue=null;
+      for(var k=0;k<state.cues.length;k++){ if(frac>=state.cues[k].from&&frac<state.cues[k].to){cue=state.cues[k];break;} }
+      subLine.textContent=cue?cue.t:'';
+    } else subLine.textContent='';
+    // progress = scene-local
+    pfill.style.width=(100*((state.i+Math.min(1,cur/dur))/SCENES.length))+'%';
+    // advance
+    var ended = state.audio ? state.audio.ended : (cur>=dur);
+    if(ended){ if(state.i<SCENES.length-1) startScene(state.i+1); else stop(); return; }
+    state.raf=requestAnimationFrame(frame);
+  }
+  state.raf=requestAnimationFrame(frame);
+}
+function i0(){return state.i;}
+
+function play(){
+  state.playing=true; film.classList.remove('paused');
+  document.getElementById('btnPlay').textContent='⏸';
+  if(state.audio && state.voice && !state.muted) state.audio.play().catch(function(){});
+  state.t0=performance.now();
+  loop();
+}
+function pause(){
+  state.playing=false; film.classList.add('paused');
+  document.getElementById('btnPlay').textContent='▶';
+  if(state.audio) state.audio.pause();
+  else state.elapsed += (performance.now()-state.t0)/1000;
+  cancelAnimationFrame(state.raf);
+}
+function stop(){ pause(); state.playing=false; document.getElementById('btnPlay').textContent='⟲'; }
+function go(i){ i=Math.max(0,Math.min(SCENES.length-1,i)); state.elapsed=0; startScene(i); if(state.playing)play(); }
+
+function enterFilm(withVoice){
+  state.voice=withVoice; state.muted=!withVoice;
+  document.getElementById('tgVoice').setAttribute('aria-pressed',String(withVoice));
+  document.getElementById('app').style.display='none';
+  film.classList.add('on');
+  var el=film;
+  if(el.requestFullscreen){ el.requestFullscreen().catch(function(){}); }
+  state.playing=true; state.elapsed=0;
+  startScene(0); play();
+}
+function exitFilm(){
+  pause();
+  if(document.fullscreenElement&&document.exitFullscreen) document.exitFullscreen().catch(function(){});
+  film.classList.remove('on');
+  document.getElementById('app').style.display='flex';
+}
+
+/* controls */
+document.getElementById('startBtn').addEventListener('click',function(){enterFilm(true);});
+document.getElementById('silentBtn').addEventListener('click',function(){enterFilm(false);});
+document.getElementById('btnExit').addEventListener('click',exitFilm);
+document.getElementById('btnPlay').addEventListener('click',function(){ state.playing?pause():play(); });
+document.getElementById('btnPrev').addEventListener('click',function(){go(state.i-1);});
+document.getElementById('btnNext').addEventListener('click',function(){go(state.i+1);});
+function toggleSubs(){state.subs=!state.subs;subsEl.classList.toggle('hidden',!state.subs);
+  document.getElementById('btnSubs').style.opacity=state.subs?1:.4;
+  document.getElementById('tgSubs').setAttribute('aria-pressed',String(state.subs));}
+function toggleVoice(){state.voice=!state.voice;state.muted=!state.voice;
+  if(!state.voice&&state.audio)state.audio.pause();
+  if(state.voice&&state.audio&&state.playing)state.audio.play().catch(function(){});
+  document.getElementById('btnVoice').textContent=state.voice?'🔊':'🔇';
+  document.getElementById('tgVoice').setAttribute('aria-pressed',String(state.voice));}
+document.getElementById('btnSubs').addEventListener('click',toggleSubs);
+document.getElementById('btnVoice').addEventListener('click',toggleVoice);
+document.getElementById('tgSubs').addEventListener('click',toggleSubs);
+document.getElementById('tgVoice').addEventListener('click',toggleVoice);
+document.getElementById('tgTilt').addEventListener('click',function(){
+  state.tilt=!state.tilt; this.setAttribute('aria-pressed',String(state.tilt));
+  if(!state.tilt){document.documentElement.style.setProperty('--rx','0deg');document.documentElement.style.setProperty('--ry','0deg');}
+});
+
+/* interactive 3D tilt */
+film.addEventListener('pointermove',function(e){
+  if(!state.tilt)return;
+  var r=film.getBoundingClientRect();
+  var x=(e.clientX-r.width/2)/r.width, y=(e.clientY-r.height/2)/r.height;
+  document.documentElement.style.setProperty('--ry',(x*10).toFixed(2)+'deg');
+  document.documentElement.style.setProperty('--rx',(-y*8).toFixed(2)+'deg');
+});
+
+/* keyboard */
+document.addEventListener('keydown',function(e){
+  if(!film.classList.contains('on'))return;
+  if(e.code==='Space'){e.preventDefault();state.playing?pause():play();}
+  if(e.key==='ArrowRight')go(state.i+1);
+  if(e.key==='ArrowLeft')go(state.i-1);
+  if(e.key==='Escape'&&!document.fullscreenElement)exitFilm();
+});
+document.addEventListener('fullscreenchange',function(){
+  if(!document.fullscreenElement&&film.classList.contains('on')){ /* stay in-film, windowed */ }
+});
+</script>
+</body>
+</html>
