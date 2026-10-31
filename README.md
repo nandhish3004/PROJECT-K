@@ -129,11 +129,14 @@ optical, acoustic and psychrometric channels are fused instead of trusted indivi
 
 ## Deployment
 
-GitHub Pages serves this branch from `/docs`:
+GitHub Pages serves this repository from `/docs` on `main`:
 
 ```
-source: branch arena/4413ce8c-project-k, path /docs
-url:    https://nandhish3004.github.io/project-k/
+Settings → Pages → Build and deployment → Source: Deploy from a branch
+Branch: main    Folder: /docs    → Save
+url: https://nandhish3004.github.io/project-k/
 ```
 
-`.nojekyll` is present so Pages serves the file byte-for-byte with no Jekyll processing.
+`.nojekyll` is present so Pages serves the file byte-for-byte with no Jekyll processing,
+and `docs/404.html` redirects any bad path back to the film. There is no build step and no
+external dependency — `docs/index.html` is the entire deployment.
