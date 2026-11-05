@@ -23,6 +23,8 @@ import base64
 import pathlib
 import re
 import sys
+import datetime
+import subprocess
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 HERE = ROOT / "demo" / "chennai"
@@ -114,10 +116,32 @@ def main() -> int:
         return 1
     bundle = bundle.replace(token, manifest_src, 1)
 
+    # ---- build stamp --------------------------------------------------------
+    # A short, lookable id: commit hash (if available) + build time. It is shown
+    # on the page, so "am I looking at the version that was just deployed?" is
+    # answerable at a glance instead of being a cache-guessing game.
+    stamp = "dev"
+    try:
+        commit = subprocess.run(
+            ["git", "rev-parse", "--short=7", "HEAD"],
+            cwd=SRC, capture_output=True, text=True, timeout=5,
+        ).stdout.strip()
+        if commit:
+            stamp = commit
+    except Exception:
+        pass
+    stamp += " " + datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+
+    token = "/*__BUILD_ID__*/dev"
+    if token not in bundle:
+        print(f"  ! placeholder {token} not found in the source bundle", file=sys.stderr)
+        return 1
+    bundle = bundle.replace(token, stamp, 1)
+
     html = html.replace("/*__THREE__*/", three, 1)
     html = html.replace("/*__SRC__*/", bundle, 1)
 
-    for left in ("__AUDIO_MANIFEST__", "/*__SRC__*/", "/*__THREE__*/"):
+    for left in ("__AUDIO_MANIFEST__", "__BUILD_ID__", "/*__SRC__*/", "/*__THREE__*/"):
         if left in html:
             print(f"  ! placeholder {left} survived substitution", file=sys.stderr)
             return 1

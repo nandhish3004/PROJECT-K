@@ -20,7 +20,12 @@ function fatal(title, body) {
     el.hidden = false;
     el.removeAttribute('hidden');          /* the attribute alone wins in some browsers */
     el.style.display = 'block';
-    el.innerHTML = '<div class="fcard"><h1>' + title + '</h1><p>' + body + '</p></div>';
+    const esc = function (x) {
+      return String(x).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    };
+    el.innerHTML = '<div class="fcard"><h1>' + esc(title) + '</h1><p>'
+      + esc(body).replace(/\n/g, '<br>') + '</p><p style="margin-top:14px;font-size:11px;color:#6b7280">'
+      + 'build ' + esc(BUILD_ID) + '</p></div>';
   }
   const d = document.getElementById('diag');
   if (d) d.textContent = 'FATAL: ' + title;
@@ -49,11 +54,20 @@ function armBootWatchdog() {
 }
 if (typeof window !== 'undefined' && window.addEventListener) {
   window.addEventListener('error', function (e) {
-    if (!__painted) fatal('SCRIPT ERROR', String((e && e.message) || 'unknown error'));
+    if (__painted) return;
+    const msg = String((e && e.message) || 'unknown error');
+    let where = '', st = '';
+    try { if (e && e.lineno) where = '\n' + String(e.filename || '').split('/').pop() + ':' + e.lineno + ':' + e.colno; } catch (x) {}
+    try { if (e && e.error && e.error.stack) st = '\n\n' + String(e.error.stack).split('\n').slice(0, 8).join('\n'); } catch (x) {}
+    fatal('SCRIPT ERROR', msg + where + st);
+    const d = document.getElementById('diag');
+    if (d) d.textContent = 'ERR ' + msg + where + st;
   });
   window.addEventListener('unhandledrejection', function (e) {
     const r = e && e.reason;
-    if (!__painted) fatal('BOOT REJECTED', String((r && r.message) || r));
+    let st = '';
+    try { if (r && r.stack) st = '\n\n' + String(r.stack).split('\n').slice(0, 8).join('\n'); } catch (x) {}
+    if (!__painted) fatal('BOOT REJECTED', String((r && r.message) || r) + st);
   });
 }
 let GLVER = 'WebGL ?';
@@ -306,6 +320,14 @@ function calibrate(W, t) {
   PH.now = W.phone.getWorldPosition(v3());
   return PH;
 }
+
+/* ========================================================================== */
+/*  BUILD STAMP                                                               */
+/* ========================================================================== */
+/* Replaced at build time with the commit and timestamp. Printed on the page so
+   "is this the version I just deployed?" is answerable by looking, instead of
+   guessing whether the browser or the CDN served a stale copy. */
+const BUILD_ID = '/*__BUILD_ID__*/dev';
 
 /* ========================================================================== */
 /*  BOOT                                                                      */
@@ -638,7 +660,7 @@ async function main() {
           't ' + t.toFixed(2) + ' / ' + DURATION + ' s    ' + Math.round(HUD.fps) + ' fps    ' + HUD.quality +
           '\ncanvas ' + Math.round(sz.x) + 'x' + Math.round(sz.y) + '    dpr ' + renderer.getPixelRatio().toFixed(2) +
           '\ncalls ' + calls + '    far ' + Math.round(camera.far) + '    frames ' + FILM.frames +
-          '\n' + GLVER;
+          '\n' + GLVER + '    build ' + BUILD_ID;
       }
     }
 
