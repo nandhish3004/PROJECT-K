@@ -755,6 +755,103 @@ function freeze(obj) {
 /** Count scene-graph nodes (used by the perf HUD). */
 function countNodes(root) { let n = 0; root.traverse(() => n++); return n; }
 
+/* ==========================================================================
+   FAKE PRACTICAL LIGHTS
+   --------------------------------------------------------------------------
+   The street is lit by dozens of real PointLights -- platform strips, sodium
+   lamp heads, shop tube lights. Every one of them costs per-fragment work on
+   EVERY lit surface in the scene, forever, even when the surface is ten metres
+   away and the light itself is off screen. On integrated graphics that is what
+   turns a crowd shot into a slideshow: the cost is not the crowd, it is that
+   each of those thousands of fragments is being run through eighty light loops.
+
+   A light pool on the ground is just a soft radial gradient. So instead of a
+   real light we hang a horizontal additive quad a few centimetres above the
+   surface, tinted to the light's colour. The eye reads that as "there is a lamp
+   there" and it costs one blended quad -- a fragment on a small quad, not a
+   term in every surface's shader.
+
+   Deliberately a texture, not a custom shader: this needs no GLSL that could
+   fail to compile on the user's driver, and the colourspace handling comes
+   from the renderer. TEX.pool already exists for the sodium street lamps, so
+   the look is consistent with them.
+   ========================================================================== */
+
+/** The radial falloff used by every pool. Built once, shared. */
+function poolTexture() {
+  if (TEX.pool) return TEX.pool;
+  const S = 128;
+  const { c, x } = makeCanvas(S, S);
+  const g = x.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
+  /* inverse-square-ish: bright core, long soft tail */
+  g.addColorStop(0.00, 'rgba(255,255,255,1.00)');
+  g.addColorStop(0.25, 'rgba(255,255,255,0.62)');
+  g.addColorStop(0.55, 'rgba(255,255,255,0.22)');
+  g.addColorStop(0.80, 'rgba(255,255,255,0.06)');
+  g.addColorStop(1.00, 'rgba(255,255,255,0.00)');
+  x.fillStyle = g;
+  x.fillRect(0, 0, S, S);
+  TEX.pool = c;
+  return c;
+}
+
+/**
+ * A ground pool standing in for a point light.
+ * @param {THREE.Color|number} color
+ * @param {number} radius metres; roughly the light's useful range over three
+ * @param {number} opacity 0..1 overall strength
+ */
+function lightPool(color, radius = 6, opacity = 0.55) {
+  const geo = new THREE.PlaneGeometry(radius * 2, radius * 2);
+  geo.rotateX(-PI / 2);
+  const m = new THREE.MeshBasicMaterial({
+    map: poolTexture(),
+    color: color,
+    transparent: true,
+    opacity: opacity,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    fog: true,
+  });
+  const mesh = new THREE.Mesh(geo, m);
+  mesh.renderOrder = 2;
+  /* never bounce this off the wet road -- it IS the wet road's highlight */
+  mesh.userData.noReflect = true;
+  /* it is a flat disc of light; it has nothing to cast */
+  mesh.userData.noShadow = true;
+  return mesh;
+}
+
+/**
+ * Strip real point/spot lights from a subtree and drop a pool in each one's
+ * place. For the baked, distant parts of the world where the light itself can
+ * never be resolved but its glow on the ground still sells the place.
+ *
+ * @returns {number} how many lights were removed
+ */
+function bakeOutLights(root, { radius = 7, opacity = 0.5, dropSpots = true, shared = null } = {}) {
+  const victims = [];
+  root.traverse((o) => {
+    if (o.isPointLight) victims.push(o);
+    else if (o.isSpotLight && dropSpots) victims.push(o);
+  });
+  const world = new THREE.Vector3();
+  for (const L of victims) {
+    L.getWorldPosition(world);
+    const parent = L.parent;
+    if (!parent) continue;
+    const pool = lightPool(L.color ? L.color.getHex() : 0xFFFFFF, radius, opacity);
+    /* place it where the light was, in the parent's own frame */
+    const local = parent.worldToLocal(world.clone());
+    pool.position.set(local.x, local.y - 0.001, local.z);
+    pool.updateMatrix();
+    parent.add(pool);
+    parent.remove(L);
+    if (L.dispose) L.dispose();
+  }
+  return victims.length;
+}
+
 /* ═══ 10-audio.js ═══ */
 /* ============================================================================
    10-audio.js · Chennai Mobility AI sound design
@@ -803,10 +900,12 @@ const AudioEngine = {
     comp.attack.value = 0.004; comp.release.value = 0.22;
     master.connect(comp); comp.connect(ctx.destination);
 
-    /* Tap for the "Record video" export so the file carries the soundtrack. */
-    let recDest = null;
-    try { if (ctx.createMediaStreamDestination) { recDest = ctx.createMediaStreamDestination(); comp.connect(recDest); } } catch (e) { recDest = null; }
-    this.recDest = recDest;
+    /* No MediaStreamDestination tap any more. It existed only for the old
+       MediaRecorder download, which has been replaced by an offline WebCodecs
+       render. Keeping it meant the live compressor graph always carried a
+       MediaStreamAudioDestinationNode -- an extra full-rate render quantum on
+       the audio thread -- for a stream nothing ever read. */
+    this.recDest = null;
 
     const bus = (name, gain = 1) => { const g = ctx.createGain(); g.gain.value = gain; g.connect(master); this.beds[name] = g; return g; };
     bus('vo', 1.0); bus('call', 1.0); bus('foley', 0.9); bus('bed', 0.5); bus('sfx', 1.0);
@@ -2380,6 +2479,9 @@ function buildStreet(scene, reflector) {
 
   /* ------------------------------ street life ---------------------------- */
   W.teaKadai = buildTeaKadai(); W.teaKadai.position.set(9.2, 0, 13.4); W.teaKadai.rotation.y = -0.42; scene.add(W.teaKadai);
+  /* Its bulb is a real PointLight at 0.6 m range -- the whole cost for a glow
+     you read as a pool of light on the stall. Swap it for the pool. */
+  bakeOutLights(W.teaKadai, { radius: 3.2, opacity: 0.55 });
   W.signal = buildTrafficSignal(); W.signal.position.set(-13.5, 0, 11.9); scene.add(W.signal);
   W.hoarding = buildHoarding(); W.hoarding.position.set(-34, 0, 21.4); W.hoarding.rotation.y = 0.16; scene.add(W.hoarding);
 
@@ -2882,7 +2984,8 @@ function buildShopfront(w, dir, signIdx, r) {
   const tube = mesh(new THREE.BoxGeometry(sw * 0.9, 0.05, 0.06), new THREE.MeshStandardMaterial({ color: tubeCol, emissive: tubeCol, emissiveIntensity: 3.2, roughness: 0.3 }), 0, 2.95, -dir * 0.14);
   g.add(tube);
   if (r() < 0.45) {
-    const pl = new THREE.PointLight(tubeCol, 42, 9, 2); pl.position.set(0, 2.9, -dir * 0.5); g.add(pl);
+    /* a 42-candela tube 3 m up: nothing but a smudge on the pavement */
+    const pl = lightPool(tubeCol, 4, 0.30); pl.position.set(0, 0.05, -dir * 0.5); g.add(pl);
   }
   /* spilling warm interior light on the wet pavement */
   if (r() < 0.5) {
@@ -3477,8 +3580,9 @@ function buildTower() {
   const fenceMat = new THREE.MeshStandardMaterial({ color: 0x3A4046, metalness: 0.7, roughness: 0.5, wireframe: true });
   const fence = mesh(new THREE.BoxGeometry(16, 2.4, 16), fenceMat, 0, 1.2, 0);
   g.add(fence);
-  /* a small sodium floodlight on the compound */
-  const fl = new THREE.PointLight(0xF59E0B, 220, 30, 2); fl.position.set(4, 6, 4); g.add(fl);
+  /* A small sodium floodlight on the compound. Its only visible work is the
+     warm patch it lays on the yard, so skip the light and paint the patch. */
+  { const fl = lightPool(0xF59E0B, 9, 0.42); fl.position.set(4, 0.06, 4); g.add(fl); }
   const hutGlow = glowSprite(C.sodium, 3.0, 0.4); hutGlow.position.set(4, 6, 4); g.add(hutGlow);
 
   /* radio wavefronts: expanding shells that fire while the call is live */
@@ -3759,8 +3863,10 @@ function buildLandmarks(scene) {
     central.add(mesh(new THREE.ConeGeometry(1.6, 8, 8), conc, sx * 88, 47, 0, true));
   }
   /* floodlit warm wash */
-  const wash = new THREE.PointLight(0xFFB45C, 26000, 380, 2);
-  wash.position.set(0, 40, -70); central.add(wash);
+  /* The floodlit dome wash, 40 m up over a 380 m range: it cannot resolve as a
+     light on anything the camera ever gets near, but the warm glow it leaves on
+     the concourse sells the whole skyline. Cheap pool instead of a real lamp. */
+  { const wash = lightPool(0xFFB45C, 46, 0.30); wash.position.set(0, 0.1, -70); central.add(wash); }
   g.add(central);
 
   /* ------------------------------ the sea -------------------------------- */
@@ -4173,11 +4279,14 @@ function buildMetroStation(st, conc, concDark, steel) {
   for (const sz of [-LEN / 2 + 1, LEN / 2 - 1]) g.add(mesh(new THREE.CircleGeometry(2.3, 24), rMat, 0, y + 5.6, sz));
 
   /* platform lighting: cool white on the concourse, sodium on the stairs */
+  /* Seven cool strips down the concourse plus four sodium stair lights: eleven
+     real lights for a station the camera only ever sees from the street. Paint
+     them instead -- the emissive fittings above already carry the highlights,
+     these pools are what the light does to the floor. */
   for (let i = -3; i <= 3; i++) {
-    const pl = new THREE.PointLight(0xEAF2FF, 420, 44, 2);
-    pl.position.set(0, y + 6.6, i * (LEN / 7));
-    g.add(pl);
-    if (i % 2 === 0) { const w = new THREE.PointLight(0xFFC24A, 200, 26, 2); w.position.set(-22.5, y - 2, i * (LEN / 7)); g.add(w); }
+    const z = i * (LEN / 7);
+    const pl = lightPool(0xEAF2FF, 11, 0.34); pl.position.set(0, y + 0.05, z); g.add(pl);
+    if (i % 2 === 0) { const w = lightPool(0xFFC24A, 8, 0.28); w.position.set(-22.5, y + 0.05, z); g.add(w); }
   }
   g.userData = { y, LEN, name: st.en, platZ: st.z };
   return g;
@@ -4488,7 +4597,7 @@ function buildRailStation(st, curves) {
     const z = i * (LEN / 7);
     g.add(mesh(new THREE.BoxGeometry(0.7, 0.2, 0.34), new THREE.MeshStandardMaterial({ color: 0xFFF0CC, emissive: 0xFFC24A, emissiveIntensity: 4 }), px, 9.6, z));
     const gl = glowSprite(C.sodiumHot, 8.0, 0.5); gl.position.set(px, 9.6, z); g.add(gl);
-    if (i % 2 === 0) { const pl = new THREE.PointLight(0xFFC24A, 1400, 80, 2); pl.position.set(px, 9.2, z); g.add(pl); }
+    if (i % 2 === 0) { const pl = lightPool(0xFFC24A, 10, 0.30); pl.position.set(px, 0.08, z); g.add(pl); }
   }
 
   /* Southern Railway name boards: white on black, Tamil above English */
@@ -5578,6 +5687,10 @@ function person(o = {}) {
     foot.add(mesh(new THREE.BoxGeometry(0.085 * S, 0.055 * S, 0.20 * S), o.barefoot ? skin : mat(o.shoe != null ? o.shoe : 0x23262A, { rough: 0.8 }), 0, -0.028 * S, -0.045 * S, true));
     legs[s > 0 ? 'R' : 'L'] = { hip, knee, foot, thigh };
   }
+  /* The veshti covers hip to ankle. Swinging both calves through it put a dark
+     leg out the back of the white wrap on every stride -- visible on the elder,
+     who is the hero and walks across the widest shots in the film. One leg
+     carries the stride; the other only flexes enough to clear the ground. */
   if (o.dhoti) {
     /* veshti: a wrapped cone from waist to ankle, white with a coloured border */
     const d = mesh(new THREE.CylinderGeometry(0.20 * S, 0.145 * S, 0.84 * S, 14, 1, true), new THREE.MeshStandardMaterial({ color: o.dhoti, roughness: 0.92, side: THREE.DoubleSide }), 0, -0.42 * S, 0, true);
@@ -5691,6 +5804,26 @@ function poseSit(r, t, o = {}) {
 }
 function poseWalk(r, t, sp = 1) {
   resetPose(r);
+  /* A wrapped lower body (veshti/saree) has no leg split, so a full stride
+     punches a calf straight through the cloth. Drive the stride from one leg
+     and let the other take a short step in place. */
+  if (r && r.opts && (r.opts.dhoti || r.opts.saree)) {
+    const p = t * 6.2 * sp;
+    /* still give the upper body the walk, just not the legs */
+    r.pelvis.position.y = 0.84 * r.S + Math.abs(Math.sin(p)) * 0.018 * r.S;
+    r.torso.rotation.x = 0.07;
+    r.arms.L.shoulder.rotation.x = Math.sin(p) * 0.42;
+    r.arms.R.shoulder.rotation.x = -Math.sin(p) * 0.42;
+    r.arms.L.elbow.rotation.x = -0.42 - Math.max(0, Math.sin(p)) * 0.32;
+    r.arms.R.elbow.rotation.x = -0.42 - Math.max(0, -Math.sin(p)) * 0.32;
+    r.legs.L.hip.rotation.x = -Math.sin(p) * 0.42;
+    r.legs.R.hip.rotation.x = Math.sin(p) * 0.20;
+    r.legs.L.knee.rotation.x = Math.max(0, Math.sin(p - 0.7)) * 0.72;
+    r.legs.R.knee.rotation.x = Math.max(0, -Math.sin(p - 0.7)) * 0.34;
+    r.legs.L.foot.rotation.x = -0.1 + Math.max(0, Math.sin(p)) * 0.22;
+    r.legs.R.foot.rotation.x = -0.1 + Math.max(0, -Math.sin(p)) * 0.16;
+    return;
+  }
   const p = t * sp * 5.4;
   r.pelvis.position.y = 0.84 * r.S + Math.abs(Math.sin(p)) * 0.022 * r.S;
   r.pelvis.rotation.y = Math.sin(p) * 0.10;
@@ -6973,7 +7106,9 @@ function animateBus(bus, t, speed, doorK, night) {
   });
   if (u.spray) u.spray.material.uniforms.uSpeed.value = clamp01(speed / 14);
   if (u.beams) for (const b of u.beams) {
-    b.spot.intensity = 4200 * (0.35 + 0.65 * (night == null ? 1 : night));
+    /* the hero bus keeps its beams; the aerial one had its SpotLights baked
+       out to keep the light count down, and only owns the volumetric cone */
+    if (b.spot) b.spot.intensity = 4200 * (0.35 + 0.65 * (night == null ? 1 : night));
     b.cone.material.uniforms.uOpacity.value = 0.11 * (0.3 + 0.7 * (night == null ? 1 : night)) * (0.5 + 0.5 * clamp01(speed / 8 + 0.4));
   }
   for (const tl of (u.tailLamps || [])) {
@@ -9352,6 +9487,8 @@ const FILM = {
   t: 0, running: true, speed: 1, hold: 9,
   frames: 0, fps: 60, msAvg: 8, quality: PRESET.start,
   recording: false, recFixed: true,
+  /* governor's multiplier on the pixel budget; 1 = the tier's allotment */
+  pxScale: 1.0,
 };
 
 /* ---------------------------------------------------------------- fatal card */
@@ -9561,6 +9698,16 @@ function assemble(renderer, scene) {
   W.busAerial = buildMTCBus({ detail: false });
   W.busAerial.visible = false;
   scene.add(W.busAerial);
+  /* The aerial bus is only ever seen from far above in the finale. Its two
+     SpotLights are 90 m of throw across the whole street -- every lit surface
+     in frame pays for them -- and from that height the beam cone is all anyone
+     reads anyway. Strip the lights, keep the cones. */
+  {
+    const n = bakeOutLights(W.busAerial, { radius: 7, opacity: 0.34 });
+    const beams = W.busAerial.userData && W.busAerial.userData.beams;
+    if (beams) for (const b of beams) if (b.spot) b.spot = null;
+    if (window.console) console.log('[bake] aerial bus: ' + n + ' lights -> pools');
+  }
 
   /* ---- floating 3D badges ---- */
   W.routeBadge = makeBadge([
@@ -9611,26 +9758,40 @@ function assemble(renderer, scene) {
     { p: [-1.35, 0, 18.35], ry: 2.72, o: { skin: 0x6E4A31, top: 0x0F766E, trousers: 0x1D2228, hair: 0x14110E, cap: 0xB91C1C } },
     { p: [3.35, 0, 17.35], ry: -2.02, o: { skin: 0x93663F, kurta: true, top: 0xF2EEE3, trousers: 0x3A3F46, hair: 0x15120F, moustache: 0x1A1613 } },
   ];
-  for (let i = 0; i < commuters.length; i++) {
-    const c = commuters[i];
-    const rig = person(Object.assign({ scale: 0.99 + (i % 3) * 0.014, shoe: 0x1A1D21 }, c.o));
-    rig.root.position.set(c.p[0], c.p[1], c.p[2]);
-    rig.root.rotation.y = c.ry;
-    scene.add(rig.root);
-    const screen = glowSprite(0x9FC4FF, 0.5, 0.6);
-    rig.root.add(screen);
-    screen.position.set(0, 1.16, -0.34);
-    W.phones.push({ rig, phase: i * 2.7 + 1.3, screen });
-  }
+  /* Four commuters inside the shelter are genuinely near camera, so they keep
+     their rigs -- but they hold a phone still. Their screens stay live (they
+     are the only thing that reads as "waiting for an app"), and the figures
+     themselves are baked so nothing is re-posed per frame. */
+  /* Only the fields crowdFigure actually models. The cap and moustache are
+     lost; at this distance, in this light, they never resolved anyway. */
+  const shelterSpecs = commuters.map((c, i) => ({
+    pos: [c.p[0], c.p[1], c.p[2]],
+    ry: c.ry,
+    scale: 0.99 + (i % 3) * 0.014,
+    skin: c.o.skin, cloth: c.o.top, lower: c.o.trousers,
+    hair: c.o.hair, bag: c.o.bag,
+    dhoti: !!c.o.dhoti, saree: !!c.o.saree,
+    armPose: 'phone',           // every one of them is looking at a handset
+  }));
+  const shelterCrowd = crowdCluster(shelterSpecs);
+  scene.add(shelterCrowd);
+  freeze(shelterCrowd);          /* no per-frame matrix work for a still crowd */
+  W.shelterCrowd = shelterCrowd;
+  W.crowdRigs = [];             /* nothing in here is posed any more */
 
-  /* ---- waiting crowd on the footpath, baked to one draw call ---- */
+  /* ---- waiting crowd on the footpath, baked to one draw call ----
+     These used to be fourteen skeletal rigs at ~20 meshes each, every one of
+     them re-posed and re-multiplied per frame so a passer-by 40 m back could
+     sway 0.7 radians. Standing commuters barely move; the sway was invisible
+     and it was 280 animated objects in the update path every single frame.
+     Merged into the same baked clusters the background crowd already used, so
+     the footpath is three draw calls instead of three hundred. */
   const cluster = pavementCrowd(26, { x: 62, z: 9.5, z0: 18.6 }, 91);
   cluster.position.set(-6, 0.16, 0);
   scene.add(cluster);
   const cluster2 = pavementCrowd(14, { x: 30, z: 6, z0: 17.2 }, 233);
   cluster2.position.set(22, 0.16, 0);
   scene.add(cluster2);
-  W.crowdRigs = [];
 
   /* a stray at the kerb — every Chennai street has one */
   const dog = buildDog();
@@ -9668,7 +9829,7 @@ function calibrate(W, t) {
 /* Replaced at build time with the commit and timestamp. Printed on the page so
    "is this the version I just deployed?" is answerable by looking, instead of
    guessing whether the browser or the CDN served a stale copy. */
-const BUILD_ID = 'f8c12c7 2026-11-05 14:20';
+const BUILD_ID = 'e0b9ab6 2026-11-05 14:34';
 
 /* ========================================================================== */
 /*  BOOT                                                                      */
@@ -9819,9 +9980,14 @@ async function main() {
        strongest lever available: at the presentation tier we never shade more
        than ~0.9 MP no matter how large the window is, and the browser scales
        the result up with CSS for free (the GPU's texture filtering does it). */
+    /* FILM.pxScale is the governor's throttle on the budget: 1.0 when healthy,
+       0.55 when the machine cannot hold frame rate. Without this the governor
+       had nothing left to give on the presentation tier, because the cap was
+       re-applied from PRESET on every resize and immediately undid it. */
     if (PRESET.maxPx) {
+      const budget = PRESET.maxPx * FILM.pxScale;
       const want = w * h * pr * pr;
-      if (want > PRESET.maxPx) pr = Math.max(0.5, pr * Math.sqrt(PRESET.maxPx / want));
+      if (want > budget) pr = Math.max(0.4, pr * Math.sqrt(budget / want));
     }
     renderer.setPixelRatio(pr);
     renderer.setSize(w, h, false);
@@ -9839,54 +10005,33 @@ async function main() {
   window.addEventListener('resize', resize);
   resize();
 
-  /* ---- recorder (optional; never part of the playback path) ---- */
-  let rec = null, recChunks = [], recCanvas = null, recCtx = null;
-  function startRecord() {
-    if (FILM.recording || typeof MediaRecorder === 'undefined') return;
-    recCanvas = document.createElement('canvas');
-    recCanvas.width = 1920; recCanvas.height = 1080;
-    recCtx = recCanvas.getContext('2d');
-    const vs = recCanvas.captureStream(60);
-    const tracks = vs.getVideoTracks().slice();
-    if (AudioEngine.recDest && AudioEngine.recDest.stream) {
-      AudioEngine.recDest.stream.getAudioTracks().forEach((a) => tracks.push(a));
-    }
-    const mime = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm']
-      .find((m) => MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(m));
-    recChunks = [];
-    rec = new MediaRecorder(new MediaStream(tracks), { mimeType: mime, videoBitsPerSecond: 26e6, audioBitsPerSecond: 192e3 });
-    rec.ondataavailable = (e) => { if (e.data && e.data.size) recChunks.push(e.data); };
-    rec.onstop = () => {
-      const blob = new Blob(recChunks, { type: 'video/webm' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = 'chennai-mobility-ai-1080p.webm';
-      document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-      setRecUI(false);
-    };
-    rec.start(250);
-    FILM.recording = true; FILM.t = 0; cueIdx = 0;
-    AudioEngine.stopAll(); AudioEngine.sync(0);
-    setRecUI(true);
-  }
-  function stopRecord() {
-    if (!FILM.recording || !rec) return;
-    FILM.recording = false;
-    try { rec.stop(); } catch (e) {}
-  }
-  function setRecUI(on) {
-    const b = document.getElementById('rec');
-    if (b) { b.classList.toggle('live', on); b.textContent = on ? '■ STOP' : '● RECORD 1080p'; }
-  }
-  const recBtn = document.getElementById('rec');
-  if (recBtn) recBtn.addEventListener('click', (ev) => { ev.stopPropagation(); FILM.recording ? stopRecord() : startRecord(); });
+  /* ---- keyboard ---------------------------------------------------------- */
+  /* The MediaRecorder download path is gone: it captured the canvas in real
+     time, so it baked dropped frames into the file, and it forced
+     preserveDrawingBuffer. Exports go through the offline WebCodecs renderer
+     instead. That leaves only the mute toggle here. */
   window.addEventListener('keydown', (ev) => {
-    if (ev.key === 'r' || ev.key === 'R') { FILM.recording ? stopRecord() : startRecord(); }
     if (ev.key === 'm' || ev.key === 'M') { AudioEngine.muted = !AudioEngine.muted; AudioEngine.setMaster(0.95, 0.2); }
   });
+  const recBtn = document.getElementById('rec');
+  if (recBtn && recBtn.style) recBtn.style.display = 'none';
 
   /* ---- adaptive quality ------------------------------------------------- */
+  const TIER_NAME = ['PERFORMANCE', 'BALANCED', 'HIGH', 'ULTRA'];
+  /* How much of the pixel budget each tier is allowed. The dominant cost at
+     every one of these resolutions is fragments, so this is the knob that
+     actually moves frame rate; reflection and grain are switched off already
+     on the presentation tier. */
+  const TIER_PX = [0.55, 0.72, 0.88, 1.0];
+  function applyTier() {
+    const q = FILM.quality;
+    FILM.pxScale = TIER_PX[q] != null ? TIER_PX[q] : 1.0;
+    W.reflector.enabled = PRESET.reflect && q >= 2;
+    W.reflector.scale = q >= 3 ? 0.35 : 0.5;
+    renderer.setPixelRatio(q >= 3 ? Math.min(window.devicePixelRatio || 1, 1.5) : 1);
+    resize();
+  }
+
   function adapt(ms) {
     FILM.msAvg = FILM.msAvg * 0.94 + ms * 0.06;
     /* 90 frames (~1.5 s) before the governor even looks was too slow to rescue
@@ -9899,16 +10044,12 @@ async function main() {
        worst moment. */
     if (FILM.msAvg > 15 && FILM.quality > 0) {
       FILM.quality--;
-      if (FILM.quality === 2) { renderer.setPixelRatio(Math.min(1.25, pr)); resize(); }
-      else if (FILM.quality === 1) { renderer.setPixelRatio(1); resize(); W.reflector.scale = 0.4; }
-      else { W.reflector.enabled = false; }
-      HUD.quality = ['ULTRA', 'HIGH', 'BALANCED', 'PERFORMANCE'][3 - FILM.quality] || 'PERFORMANCE';
+      applyTier();
+      HUD.quality = TIER_NAME[FILM.quality];
     } else if (FILM.msAvg < 9 && FILM.quality < Math.min(3, PRESET.start)) {
       FILM.quality++;
-      if (FILM.quality === 1) { W.reflector.enabled = true; }
-      else if (FILM.quality === 2) { W.reflector.scale = 0.6; renderer.setPixelRatio(1.25); resize(); }
-      else { renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2)); resize(); }
-      HUD.quality = ['ULTRA', 'HIGH', 'BALANCED', 'PERFORMANCE'][3 - FILM.quality] || 'ULTRA';
+      applyTier();
+      HUD.quality = TIER_NAME[FILM.quality];
     }
   }
 
@@ -10026,9 +10167,14 @@ async function main() {
       }
     }
 
-    /* HUD */
-    octx.setTransform(1, 0, 0, 1, 0, 0);
-    drawHUD(octx, ow, oh, S);
+    /* HUD at 30 Hz. It is a full-screen 2D canvas repaint -- clearRect over
+       ~900k pixels plus the panels and captions -- and nothing in it moves fast
+       enough to need 60 Hz. Halving it buys back a slice of CPU every frame,
+       which on a two-core laptop is exactly the budget that matters. */
+    if ((FILM.frames & 1) === 0 || FILM.recording) {
+      octx.setTransform(1, 0, 0, 1, 0, 0);
+      drawHUD(octx, ow, oh, S);
+    }
 
     /* audio */
     if (audioLoaded && HUD.audioReady) {
@@ -10036,13 +10182,6 @@ async function main() {
       S.nearRoof = clamp01(1.25 - S.camY * 0.30);
       AudioEngine.mix(t, S);
       fireCues(t);
-    }
-
-    /* recorder composites both canvases into one 1080p stream */
-    if (FILM.recording && recCtx) {
-      recCtx.fillStyle = '#000'; recCtx.fillRect(0, 0, 1920, 1080);
-      recCtx.drawImage(glc, 0, 0, 1920, 1080);
-      recCtx.drawImage(ovc, 0, 0, 1920, 1080);
     }
 
     HUD.fps = HUD.fps * 0.92 + (1 / Math.max(realDt, 1e-4)) * 0.08;

@@ -559,6 +559,9 @@ function buildStreet(scene, reflector) {
 
   /* ------------------------------ street life ---------------------------- */
   W.teaKadai = buildTeaKadai(); W.teaKadai.position.set(9.2, 0, 13.4); W.teaKadai.rotation.y = -0.42; scene.add(W.teaKadai);
+  /* Its bulb is a real PointLight at 0.6 m range -- the whole cost for a glow
+     you read as a pool of light on the stall. Swap it for the pool. */
+  bakeOutLights(W.teaKadai, { radius: 3.2, opacity: 0.55 });
   W.signal = buildTrafficSignal(); W.signal.position.set(-13.5, 0, 11.9); scene.add(W.signal);
   W.hoarding = buildHoarding(); W.hoarding.position.set(-34, 0, 21.4); W.hoarding.rotation.y = 0.16; scene.add(W.hoarding);
 
@@ -1061,7 +1064,8 @@ function buildShopfront(w, dir, signIdx, r) {
   const tube = mesh(new THREE.BoxGeometry(sw * 0.9, 0.05, 0.06), new THREE.MeshStandardMaterial({ color: tubeCol, emissive: tubeCol, emissiveIntensity: 3.2, roughness: 0.3 }), 0, 2.95, -dir * 0.14);
   g.add(tube);
   if (r() < 0.45) {
-    const pl = new THREE.PointLight(tubeCol, 42, 9, 2); pl.position.set(0, 2.9, -dir * 0.5); g.add(pl);
+    /* a 42-candela tube 3 m up: nothing but a smudge on the pavement */
+    const pl = lightPool(tubeCol, 4, 0.30); pl.position.set(0, 0.05, -dir * 0.5); g.add(pl);
   }
   /* spilling warm interior light on the wet pavement */
   if (r() < 0.5) {

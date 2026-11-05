@@ -791,7 +791,9 @@ function animateBus(bus, t, speed, doorK, night) {
   });
   if (u.spray) u.spray.material.uniforms.uSpeed.value = clamp01(speed / 14);
   if (u.beams) for (const b of u.beams) {
-    b.spot.intensity = 4200 * (0.35 + 0.65 * (night == null ? 1 : night));
+    /* the hero bus keeps its beams; the aerial one had its SpotLights baked
+       out to keep the light count down, and only owns the volumetric cone */
+    if (b.spot) b.spot.intensity = 4200 * (0.35 + 0.65 * (night == null ? 1 : night));
     b.cone.material.uniforms.uOpacity.value = 0.11 * (0.3 + 0.7 * (night == null ? 1 : night)) * (0.5 + 0.5 * clamp01(speed / 8 + 0.4));
   }
   for (const tl of (u.tailLamps || [])) {

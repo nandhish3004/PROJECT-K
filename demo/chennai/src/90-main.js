@@ -45,6 +45,8 @@ const FILM = {
   t: 0, running: true, speed: 1, hold: 9,
   frames: 0, fps: 60, msAvg: 8, quality: PRESET.start,
   recording: false, recFixed: true,
+  /* governor's multiplier on the pixel budget; 1 = the tier's allotment */
+  pxScale: 1.0,
 };
 
 /* ---------------------------------------------------------------- fatal card */
@@ -254,6 +256,16 @@ function assemble(renderer, scene) {
   W.busAerial = buildMTCBus({ detail: false });
   W.busAerial.visible = false;
   scene.add(W.busAerial);
+  /* The aerial bus is only ever seen from far above in the finale. Its two
+     SpotLights are 90 m of throw across the whole street -- every lit surface
+     in frame pays for them -- and from that height the beam cone is all anyone
+     reads anyway. Strip the lights, keep the cones. */
+  {
+    const n = bakeOutLights(W.busAerial, { radius: 7, opacity: 0.34 });
+    const beams = W.busAerial.userData && W.busAerial.userData.beams;
+    if (beams) for (const b of beams) if (b.spot) b.spot = null;
+    if (window.console) console.log('[bake] aerial bus: ' + n + ' lights -> pools');
+  }
 
   /* ---- floating 3D badges ---- */
   W.routeBadge = makeBadge([
@@ -304,26 +316,40 @@ function assemble(renderer, scene) {
     { p: [-1.35, 0, 18.35], ry: 2.72, o: { skin: 0x6E4A31, top: 0x0F766E, trousers: 0x1D2228, hair: 0x14110E, cap: 0xB91C1C } },
     { p: [3.35, 0, 17.35], ry: -2.02, o: { skin: 0x93663F, kurta: true, top: 0xF2EEE3, trousers: 0x3A3F46, hair: 0x15120F, moustache: 0x1A1613 } },
   ];
-  for (let i = 0; i < commuters.length; i++) {
-    const c = commuters[i];
-    const rig = person(Object.assign({ scale: 0.99 + (i % 3) * 0.014, shoe: 0x1A1D21 }, c.o));
-    rig.root.position.set(c.p[0], c.p[1], c.p[2]);
-    rig.root.rotation.y = c.ry;
-    scene.add(rig.root);
-    const screen = glowSprite(0x9FC4FF, 0.5, 0.6);
-    rig.root.add(screen);
-    screen.position.set(0, 1.16, -0.34);
-    W.phones.push({ rig, phase: i * 2.7 + 1.3, screen });
-  }
+  /* Four commuters inside the shelter are genuinely near camera, so they keep
+     their rigs -- but they hold a phone still. Their screens stay live (they
+     are the only thing that reads as "waiting for an app"), and the figures
+     themselves are baked so nothing is re-posed per frame. */
+  /* Only the fields crowdFigure actually models. The cap and moustache are
+     lost; at this distance, in this light, they never resolved anyway. */
+  const shelterSpecs = commuters.map((c, i) => ({
+    pos: [c.p[0], c.p[1], c.p[2]],
+    ry: c.ry,
+    scale: 0.99 + (i % 3) * 0.014,
+    skin: c.o.skin, cloth: c.o.top, lower: c.o.trousers,
+    hair: c.o.hair, bag: c.o.bag,
+    dhoti: !!c.o.dhoti, saree: !!c.o.saree,
+    armPose: 'phone',           // every one of them is looking at a handset
+  }));
+  const shelterCrowd = crowdCluster(shelterSpecs);
+  scene.add(shelterCrowd);
+  freeze(shelterCrowd);          /* no per-frame matrix work for a still crowd */
+  W.shelterCrowd = shelterCrowd;
+  W.crowdRigs = [];             /* nothing in here is posed any more */
 
-  /* ---- waiting crowd on the footpath, baked to one draw call ---- */
+  /* ---- waiting crowd on the footpath, baked to one draw call ----
+     These used to be fourteen skeletal rigs at ~20 meshes each, every one of
+     them re-posed and re-multiplied per frame so a passer-by 40 m back could
+     sway 0.7 radians. Standing commuters barely move; the sway was invisible
+     and it was 280 animated objects in the update path every single frame.
+     Merged into the same baked clusters the background crowd already used, so
+     the footpath is three draw calls instead of three hundred. */
   const cluster = pavementCrowd(26, { x: 62, z: 9.5, z0: 18.6 }, 91);
   cluster.position.set(-6, 0.16, 0);
   scene.add(cluster);
   const cluster2 = pavementCrowd(14, { x: 30, z: 6, z0: 17.2 }, 233);
   cluster2.position.set(22, 0.16, 0);
   scene.add(cluster2);
-  W.crowdRigs = [];
 
   /* a stray at the kerb — every Chennai street has one */
   const dog = buildDog();
@@ -512,9 +538,14 @@ async function main() {
        strongest lever available: at the presentation tier we never shade more
        than ~0.9 MP no matter how large the window is, and the browser scales
        the result up with CSS for free (the GPU's texture filtering does it). */
+    /* FILM.pxScale is the governor's throttle on the budget: 1.0 when healthy,
+       0.55 when the machine cannot hold frame rate. Without this the governor
+       had nothing left to give on the presentation tier, because the cap was
+       re-applied from PRESET on every resize and immediately undid it. */
     if (PRESET.maxPx) {
+      const budget = PRESET.maxPx * FILM.pxScale;
       const want = w * h * pr * pr;
-      if (want > PRESET.maxPx) pr = Math.max(0.5, pr * Math.sqrt(PRESET.maxPx / want));
+      if (want > budget) pr = Math.max(0.4, pr * Math.sqrt(budget / want));
     }
     renderer.setPixelRatio(pr);
     renderer.setSize(w, h, false);
@@ -532,54 +563,33 @@ async function main() {
   window.addEventListener('resize', resize);
   resize();
 
-  /* ---- recorder (optional; never part of the playback path) ---- */
-  let rec = null, recChunks = [], recCanvas = null, recCtx = null;
-  function startRecord() {
-    if (FILM.recording || typeof MediaRecorder === 'undefined') return;
-    recCanvas = document.createElement('canvas');
-    recCanvas.width = 1920; recCanvas.height = 1080;
-    recCtx = recCanvas.getContext('2d');
-    const vs = recCanvas.captureStream(60);
-    const tracks = vs.getVideoTracks().slice();
-    if (AudioEngine.recDest && AudioEngine.recDest.stream) {
-      AudioEngine.recDest.stream.getAudioTracks().forEach((a) => tracks.push(a));
-    }
-    const mime = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm']
-      .find((m) => MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(m));
-    recChunks = [];
-    rec = new MediaRecorder(new MediaStream(tracks), { mimeType: mime, videoBitsPerSecond: 26e6, audioBitsPerSecond: 192e3 });
-    rec.ondataavailable = (e) => { if (e.data && e.data.size) recChunks.push(e.data); };
-    rec.onstop = () => {
-      const blob = new Blob(recChunks, { type: 'video/webm' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = 'chennai-mobility-ai-1080p.webm';
-      document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-      setRecUI(false);
-    };
-    rec.start(250);
-    FILM.recording = true; FILM.t = 0; cueIdx = 0;
-    AudioEngine.stopAll(); AudioEngine.sync(0);
-    setRecUI(true);
-  }
-  function stopRecord() {
-    if (!FILM.recording || !rec) return;
-    FILM.recording = false;
-    try { rec.stop(); } catch (e) {}
-  }
-  function setRecUI(on) {
-    const b = document.getElementById('rec');
-    if (b) { b.classList.toggle('live', on); b.textContent = on ? '■ STOP' : '● RECORD 1080p'; }
-  }
-  const recBtn = document.getElementById('rec');
-  if (recBtn) recBtn.addEventListener('click', (ev) => { ev.stopPropagation(); FILM.recording ? stopRecord() : startRecord(); });
+  /* ---- keyboard ---------------------------------------------------------- */
+  /* The MediaRecorder download path is gone: it captured the canvas in real
+     time, so it baked dropped frames into the file, and it forced
+     preserveDrawingBuffer. Exports go through the offline WebCodecs renderer
+     instead. That leaves only the mute toggle here. */
   window.addEventListener('keydown', (ev) => {
-    if (ev.key === 'r' || ev.key === 'R') { FILM.recording ? stopRecord() : startRecord(); }
     if (ev.key === 'm' || ev.key === 'M') { AudioEngine.muted = !AudioEngine.muted; AudioEngine.setMaster(0.95, 0.2); }
   });
+  const recBtn = document.getElementById('rec');
+  if (recBtn && recBtn.style) recBtn.style.display = 'none';
 
   /* ---- adaptive quality ------------------------------------------------- */
+  const TIER_NAME = ['PERFORMANCE', 'BALANCED', 'HIGH', 'ULTRA'];
+  /* How much of the pixel budget each tier is allowed. The dominant cost at
+     every one of these resolutions is fragments, so this is the knob that
+     actually moves frame rate; reflection and grain are switched off already
+     on the presentation tier. */
+  const TIER_PX = [0.55, 0.72, 0.88, 1.0];
+  function applyTier() {
+    const q = FILM.quality;
+    FILM.pxScale = TIER_PX[q] != null ? TIER_PX[q] : 1.0;
+    W.reflector.enabled = PRESET.reflect && q >= 2;
+    W.reflector.scale = q >= 3 ? 0.35 : 0.5;
+    renderer.setPixelRatio(q >= 3 ? Math.min(window.devicePixelRatio || 1, 1.5) : 1);
+    resize();
+  }
+
   function adapt(ms) {
     FILM.msAvg = FILM.msAvg * 0.94 + ms * 0.06;
     /* 90 frames (~1.5 s) before the governor even looks was too slow to rescue
@@ -592,16 +602,12 @@ async function main() {
        worst moment. */
     if (FILM.msAvg > 15 && FILM.quality > 0) {
       FILM.quality--;
-      if (FILM.quality === 2) { renderer.setPixelRatio(Math.min(1.25, pr)); resize(); }
-      else if (FILM.quality === 1) { renderer.setPixelRatio(1); resize(); W.reflector.scale = 0.4; }
-      else { W.reflector.enabled = false; }
-      HUD.quality = ['ULTRA', 'HIGH', 'BALANCED', 'PERFORMANCE'][3 - FILM.quality] || 'PERFORMANCE';
+      applyTier();
+      HUD.quality = TIER_NAME[FILM.quality];
     } else if (FILM.msAvg < 9 && FILM.quality < Math.min(3, PRESET.start)) {
       FILM.quality++;
-      if (FILM.quality === 1) { W.reflector.enabled = true; }
-      else if (FILM.quality === 2) { W.reflector.scale = 0.6; renderer.setPixelRatio(1.25); resize(); }
-      else { renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2)); resize(); }
-      HUD.quality = ['ULTRA', 'HIGH', 'BALANCED', 'PERFORMANCE'][3 - FILM.quality] || 'ULTRA';
+      applyTier();
+      HUD.quality = TIER_NAME[FILM.quality];
     }
   }
 
@@ -719,9 +725,14 @@ async function main() {
       }
     }
 
-    /* HUD */
-    octx.setTransform(1, 0, 0, 1, 0, 0);
-    drawHUD(octx, ow, oh, S);
+    /* HUD at 30 Hz. It is a full-screen 2D canvas repaint -- clearRect over
+       ~900k pixels plus the panels and captions -- and nothing in it moves fast
+       enough to need 60 Hz. Halving it buys back a slice of CPU every frame,
+       which on a two-core laptop is exactly the budget that matters. */
+    if ((FILM.frames & 1) === 0 || FILM.recording) {
+      octx.setTransform(1, 0, 0, 1, 0, 0);
+      drawHUD(octx, ow, oh, S);
+    }
 
     /* audio */
     if (audioLoaded && HUD.audioReady) {
@@ -729,13 +740,6 @@ async function main() {
       S.nearRoof = clamp01(1.25 - S.camY * 0.30);
       AudioEngine.mix(t, S);
       fireCues(t);
-    }
-
-    /* recorder composites both canvases into one 1080p stream */
-    if (FILM.recording && recCtx) {
-      recCtx.fillStyle = '#000'; recCtx.fillRect(0, 0, 1920, 1080);
-      recCtx.drawImage(glc, 0, 0, 1920, 1080);
-      recCtx.drawImage(ovc, 0, 0, 1920, 1080);
     }
 
     HUD.fps = HUD.fps * 0.92 + (1 / Math.max(realDt, 1e-4)) * 0.08;

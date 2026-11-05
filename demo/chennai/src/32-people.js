@@ -107,6 +107,10 @@ function person(o = {}) {
     foot.add(mesh(new THREE.BoxGeometry(0.085 * S, 0.055 * S, 0.20 * S), o.barefoot ? skin : mat(o.shoe != null ? o.shoe : 0x23262A, { rough: 0.8 }), 0, -0.028 * S, -0.045 * S, true));
     legs[s > 0 ? 'R' : 'L'] = { hip, knee, foot, thigh };
   }
+  /* The veshti covers hip to ankle. Swinging both calves through it put a dark
+     leg out the back of the white wrap on every stride -- visible on the elder,
+     who is the hero and walks across the widest shots in the film. One leg
+     carries the stride; the other only flexes enough to clear the ground. */
   if (o.dhoti) {
     /* veshti: a wrapped cone from waist to ankle, white with a coloured border */
     const d = mesh(new THREE.CylinderGeometry(0.20 * S, 0.145 * S, 0.84 * S, 14, 1, true), new THREE.MeshStandardMaterial({ color: o.dhoti, roughness: 0.92, side: THREE.DoubleSide }), 0, -0.42 * S, 0, true);
@@ -220,6 +224,26 @@ function poseSit(r, t, o = {}) {
 }
 function poseWalk(r, t, sp = 1) {
   resetPose(r);
+  /* A wrapped lower body (veshti/saree) has no leg split, so a full stride
+     punches a calf straight through the cloth. Drive the stride from one leg
+     and let the other take a short step in place. */
+  if (r && r.opts && (r.opts.dhoti || r.opts.saree)) {
+    const p = t * 6.2 * sp;
+    /* still give the upper body the walk, just not the legs */
+    r.pelvis.position.y = 0.84 * r.S + Math.abs(Math.sin(p)) * 0.018 * r.S;
+    r.torso.rotation.x = 0.07;
+    r.arms.L.shoulder.rotation.x = Math.sin(p) * 0.42;
+    r.arms.R.shoulder.rotation.x = -Math.sin(p) * 0.42;
+    r.arms.L.elbow.rotation.x = -0.42 - Math.max(0, Math.sin(p)) * 0.32;
+    r.arms.R.elbow.rotation.x = -0.42 - Math.max(0, -Math.sin(p)) * 0.32;
+    r.legs.L.hip.rotation.x = -Math.sin(p) * 0.42;
+    r.legs.R.hip.rotation.x = Math.sin(p) * 0.20;
+    r.legs.L.knee.rotation.x = Math.max(0, Math.sin(p - 0.7)) * 0.72;
+    r.legs.R.knee.rotation.x = Math.max(0, -Math.sin(p - 0.7)) * 0.34;
+    r.legs.L.foot.rotation.x = -0.1 + Math.max(0, Math.sin(p)) * 0.22;
+    r.legs.R.foot.rotation.x = -0.1 + Math.max(0, -Math.sin(p)) * 0.16;
+    return;
+  }
   const p = t * sp * 5.4;
   r.pelvis.position.y = 0.84 * r.S + Math.abs(Math.sin(p)) * 0.022 * r.S;
   r.pelvis.rotation.y = Math.sin(p) * 0.10;

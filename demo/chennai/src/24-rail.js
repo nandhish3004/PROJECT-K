@@ -315,11 +315,14 @@ function buildMetroStation(st, conc, concDark, steel) {
   for (const sz of [-LEN / 2 + 1, LEN / 2 - 1]) g.add(mesh(new THREE.CircleGeometry(2.3, 24), rMat, 0, y + 5.6, sz));
 
   /* platform lighting: cool white on the concourse, sodium on the stairs */
+  /* Seven cool strips down the concourse plus four sodium stair lights: eleven
+     real lights for a station the camera only ever sees from the street. Paint
+     them instead -- the emissive fittings above already carry the highlights,
+     these pools are what the light does to the floor. */
   for (let i = -3; i <= 3; i++) {
-    const pl = new THREE.PointLight(0xEAF2FF, 420, 44, 2);
-    pl.position.set(0, y + 6.6, i * (LEN / 7));
-    g.add(pl);
-    if (i % 2 === 0) { const w = new THREE.PointLight(0xFFC24A, 200, 26, 2); w.position.set(-22.5, y - 2, i * (LEN / 7)); g.add(w); }
+    const z = i * (LEN / 7);
+    const pl = lightPool(0xEAF2FF, 11, 0.34); pl.position.set(0, y + 0.05, z); g.add(pl);
+    if (i % 2 === 0) { const w = lightPool(0xFFC24A, 8, 0.28); w.position.set(-22.5, y + 0.05, z); g.add(w); }
   }
   g.userData = { y, LEN, name: st.en, platZ: st.z };
   return g;
@@ -630,7 +633,7 @@ function buildRailStation(st, curves) {
     const z = i * (LEN / 7);
     g.add(mesh(new THREE.BoxGeometry(0.7, 0.2, 0.34), new THREE.MeshStandardMaterial({ color: 0xFFF0CC, emissive: 0xFFC24A, emissiveIntensity: 4 }), px, 9.6, z));
     const gl = glowSprite(C.sodiumHot, 8.0, 0.5); gl.position.set(px, 9.6, z); g.add(gl);
-    if (i % 2 === 0) { const pl = new THREE.PointLight(0xFFC24A, 1400, 80, 2); pl.position.set(px, 9.2, z); g.add(pl); }
+    if (i % 2 === 0) { const pl = lightPool(0xFFC24A, 10, 0.30); pl.position.set(px, 0.08, z); g.add(pl); }
   }
 
   /* Southern Railway name boards: white on black, Tamil above English */

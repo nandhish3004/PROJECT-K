@@ -436,8 +436,9 @@ function buildTower() {
   const fenceMat = new THREE.MeshStandardMaterial({ color: 0x3A4046, metalness: 0.7, roughness: 0.5, wireframe: true });
   const fence = mesh(new THREE.BoxGeometry(16, 2.4, 16), fenceMat, 0, 1.2, 0);
   g.add(fence);
-  /* a small sodium floodlight on the compound */
-  const fl = new THREE.PointLight(0xF59E0B, 220, 30, 2); fl.position.set(4, 6, 4); g.add(fl);
+  /* A small sodium floodlight on the compound. Its only visible work is the
+     warm patch it lays on the yard, so skip the light and paint the patch. */
+  { const fl = lightPool(0xF59E0B, 9, 0.42); fl.position.set(4, 0.06, 4); g.add(fl); }
   const hutGlow = glowSprite(C.sodium, 3.0, 0.4); hutGlow.position.set(4, 6, 4); g.add(hutGlow);
 
   /* radio wavefronts: expanding shells that fire while the call is live */
@@ -718,8 +719,10 @@ function buildLandmarks(scene) {
     central.add(mesh(new THREE.ConeGeometry(1.6, 8, 8), conc, sx * 88, 47, 0, true));
   }
   /* floodlit warm wash */
-  const wash = new THREE.PointLight(0xFFB45C, 26000, 380, 2);
-  wash.position.set(0, 40, -70); central.add(wash);
+  /* The floodlit dome wash, 40 m up over a 380 m range: it cannot resolve as a
+     light on anything the camera ever gets near, but the warm glow it leaves on
+     the concourse sells the whole skyline. Cheap pool instead of a real lamp. */
+  { const wash = lightPool(0xFFB45C, 46, 0.30); wash.position.set(0, 0.1, -70); central.add(wash); }
   g.add(central);
 
   /* ------------------------------ the sea -------------------------------- */

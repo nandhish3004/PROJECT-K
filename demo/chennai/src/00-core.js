@@ -616,3 +616,100 @@ function freeze(obj) {
 }
 /** Count scene-graph nodes (used by the perf HUD). */
 function countNodes(root) { let n = 0; root.traverse(() => n++); return n; }
+
+/* ==========================================================================
+   FAKE PRACTICAL LIGHTS
+   --------------------------------------------------------------------------
+   The street is lit by dozens of real PointLights -- platform strips, sodium
+   lamp heads, shop tube lights. Every one of them costs per-fragment work on
+   EVERY lit surface in the scene, forever, even when the surface is ten metres
+   away and the light itself is off screen. On integrated graphics that is what
+   turns a crowd shot into a slideshow: the cost is not the crowd, it is that
+   each of those thousands of fragments is being run through eighty light loops.
+
+   A light pool on the ground is just a soft radial gradient. So instead of a
+   real light we hang a horizontal additive quad a few centimetres above the
+   surface, tinted to the light's colour. The eye reads that as "there is a lamp
+   there" and it costs one blended quad -- a fragment on a small quad, not a
+   term in every surface's shader.
+
+   Deliberately a texture, not a custom shader: this needs no GLSL that could
+   fail to compile on the user's driver, and the colourspace handling comes
+   from the renderer. TEX.pool already exists for the sodium street lamps, so
+   the look is consistent with them.
+   ========================================================================== */
+
+/** The radial falloff used by every pool. Built once, shared. */
+function poolTexture() {
+  if (TEX.pool) return TEX.pool;
+  const S = 128;
+  const { c, x } = makeCanvas(S, S);
+  const g = x.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
+  /* inverse-square-ish: bright core, long soft tail */
+  g.addColorStop(0.00, 'rgba(255,255,255,1.00)');
+  g.addColorStop(0.25, 'rgba(255,255,255,0.62)');
+  g.addColorStop(0.55, 'rgba(255,255,255,0.22)');
+  g.addColorStop(0.80, 'rgba(255,255,255,0.06)');
+  g.addColorStop(1.00, 'rgba(255,255,255,0.00)');
+  x.fillStyle = g;
+  x.fillRect(0, 0, S, S);
+  TEX.pool = c;
+  return c;
+}
+
+/**
+ * A ground pool standing in for a point light.
+ * @param {THREE.Color|number} color
+ * @param {number} radius metres; roughly the light's useful range over three
+ * @param {number} opacity 0..1 overall strength
+ */
+function lightPool(color, radius = 6, opacity = 0.55) {
+  const geo = new THREE.PlaneGeometry(radius * 2, radius * 2);
+  geo.rotateX(-PI / 2);
+  const m = new THREE.MeshBasicMaterial({
+    map: poolTexture(),
+    color: color,
+    transparent: true,
+    opacity: opacity,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    fog: true,
+  });
+  const mesh = new THREE.Mesh(geo, m);
+  mesh.renderOrder = 2;
+  /* never bounce this off the wet road -- it IS the wet road's highlight */
+  mesh.userData.noReflect = true;
+  /* it is a flat disc of light; it has nothing to cast */
+  mesh.userData.noShadow = true;
+  return mesh;
+}
+
+/**
+ * Strip real point/spot lights from a subtree and drop a pool in each one's
+ * place. For the baked, distant parts of the world where the light itself can
+ * never be resolved but its glow on the ground still sells the place.
+ *
+ * @returns {number} how many lights were removed
+ */
+function bakeOutLights(root, { radius = 7, opacity = 0.5, dropSpots = true, shared = null } = {}) {
+  const victims = [];
+  root.traverse((o) => {
+    if (o.isPointLight) victims.push(o);
+    else if (o.isSpotLight && dropSpots) victims.push(o);
+  });
+  const world = new THREE.Vector3();
+  for (const L of victims) {
+    L.getWorldPosition(world);
+    const parent = L.parent;
+    if (!parent) continue;
+    const pool = lightPool(L.color ? L.color.getHex() : 0xFFFFFF, radius, opacity);
+    /* place it where the light was, in the parent's own frame */
+    const local = parent.worldToLocal(world.clone());
+    pool.position.set(local.x, local.y - 0.001, local.z);
+    pool.updateMatrix();
+    parent.add(pool);
+    parent.remove(L);
+    if (L.dispose) L.dispose();
+  }
+  return victims.length;
+}

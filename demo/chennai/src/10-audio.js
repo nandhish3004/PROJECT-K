@@ -45,10 +45,12 @@ const AudioEngine = {
     comp.attack.value = 0.004; comp.release.value = 0.22;
     master.connect(comp); comp.connect(ctx.destination);
 
-    /* Tap for the "Record video" export so the file carries the soundtrack. */
-    let recDest = null;
-    try { if (ctx.createMediaStreamDestination) { recDest = ctx.createMediaStreamDestination(); comp.connect(recDest); } } catch (e) { recDest = null; }
-    this.recDest = recDest;
+    /* No MediaStreamDestination tap any more. It existed only for the old
+       MediaRecorder download, which has been replaced by an offline WebCodecs
+       render. Keeping it meant the live compressor graph always carried a
+       MediaStreamAudioDestinationNode -- an extra full-rate render quantum on
+       the audio thread -- for a stream nothing ever read. */
+    this.recDest = null;
 
     const bus = (name, gain = 1) => { const g = ctx.createGain(); g.gain.value = gain; g.connect(master); this.beds[name] = g; return g; };
     bus('vo', 1.0); bus('call', 1.0); bus('foley', 0.9); bus('bed', 0.5); bus('sfx', 1.0);
