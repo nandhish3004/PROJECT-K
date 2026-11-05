@@ -193,20 +193,130 @@ class Track {
  * the whole 150 s glide is one continuous C1 curve — no cuts, no OrbitControls.
  */
 /* Reused by CameraTrack._cr so a 9,000-frame path allocates nothing. */
+/* C1-smooth tangent magnitude limiter: identity below `lim`, then asymptotically
+   approaches it. (l/lim)/(1 + (l/lim)^p)^(1/p) with p=4 keeps curve shape close to
+   the hard-limited version while removing the discontinuity that caused judder. */
+function _softScale(l, lim) {
+  if (!(l > 0) || !(lim > 0)) return 1;
+  const r = l / lim;
+  if (r <= 1) return 1;
+  return Math.pow(1 + Math.pow(r, 4), -0.25);
+}
 const _crM1 = new THREE.Vector3(), _crM2 = new THREE.Vector3();
 const _crT1 = new THREE.Vector3(), _crT2 = new THREE.Vector3();
 
 class CameraTrack {
   constructor() { this.keys = []; }
-  add(o) { this.keys.push(Object.assign({ ease: easeByName('cine'), fov: 42, roll: 0 }, o)); this.keys.sort((a, b) => a.t - b.t); this._ph = null; return this; }
+  add(o) { this.keys.push(Object.assign({ ease: easeByName('cine'), fov: 42, roll: 0 }, o)); this.keys.sort((a, b) => a.t - b.t); this._ph = null; this._tm = null; this._kp = null; return this; }
   /** Local index + eased parameter for time t. */
+  /* ------------------------------------------------------------------------
+     Time map.
+
+     The obvious implementation is  u = b.ease(seg(t, a.t, b.t))  -- every key
+     applies its OWN ease to its segment. That is C0 but not C1: at each key
+     boundary the ease function and u both change instantaneously, so the
+     parametric speed jumps. Catmull-Rom then multiplies that jump by the segment
+     chord, which on the Act 3/4 aerial keys (hundreds of metres apart) produced
+     single-frame speed steps of 50-265 m/s. Rendered at 60 fps that is judder,
+     and because it is baked into the timeline it survives into the exported
+     video -- which is exactly the symptom: the downloaded file jitters too.
+
+     The fix is a proper time map. Each key stores the average velocity its own
+     easing would produce over its segment. The parametric rate at time t is a
+     smoothstep-weighted blend of the segment either side of the key, so the rate
+     is continuous across the boundary and so is its derivative. Integrating that
+     rate over the timeline gives a monotone lookup, which is then normalised back
+     to the configured key times: the camera still arrives at each key on exactly
+     the authored second, so every shot and cue stays locked, but it no longer
+     changes speed abruptly when it gets there.
+     ------------------------------------------------------------------------ */
+  _compileTimeMap() {
+    const K = this.keys;
+    if (this._tm && this._tm.n === K.length) return this._tm;
+    const N = Math.max(64, K.length * 48);
+    const t0 = K[0].t, t1 = K[K.length - 1].t;
+    if (!(t1 > t0)) return null;
+
+    /* average parametric rate each segment's own easing implies, measured from
+       the easing itself (midpoint rule over 64 samples) */
+    const rate = new Array(K.length - 1);
+    for (let i = 0; i < K.length - 1; i++) {
+      const e = K[i + 1].ease;
+      const h = 1e-4;
+      let acc = 0;
+      for (let s2 = 0; s2 < 64; s2++) acc += e((s2 + 0.5) / 64);
+      rate[i] = acc / 64;
+    }
+
+    const rateAt = (t) => {
+      let i = 0;
+      while (i < K.length - 2 && t >= K[i + 1].t) i++;
+      const a = K[i], b = K[i + 1];
+      const localR = rate[i];
+      const prevR = i > 0 ? rate[i - 1] : rate[i];
+      const nextR = i < K.length - 2 ? rate[i + 1] : rate[i];
+      const h = smoothstep(0, 1, (t - a.t) / Math.max(1e-6, b.t - a.t));
+      const left = lerp(prevR, localR, h);
+      const right = lerp(localR, nextR, h);
+      return Math.max(1e-4, lerp(left, right, h));
+    };
+
+    /* integrate */
+    const xs = new Float64Array(N + 1), ys = new Float64Array(N + 1);
+    let acc = 0;
+    xs[0] = t0; ys[0] = 0;
+    for (let k = 1; k <= N; k++) {
+      const ta = t0 + (t1 - t0) * ((k - 1) / N);
+      const tb = t0 + (t1 - t0) * (k / N);
+      const tm2 = 0.5 * (ta + tb);
+      acc += (tb - ta) * rateAt(tm2);
+      xs[k] = tb; ys[k] = acc;
+    }
+    const total = acc;
+    if (!(total > 0)) return null;
+    const span = t1 - t0;
+    this._tm = { n: K.length, xs: xs, ys: ys, total: total, t0: t0, t1: t1, span: span };
+    return this._tm;
+  }
+
+  /** Invert the integrated rate: authored clock time -> normalised track progress 0..1. */
+  _progress(t) {
+    const tm = this._compileTimeMap();
+    if (!tm) return 0;
+    if (t <= tm.t0) return 0;
+    if (t >= tm.t1) return 1;
+    const xs = tm.xs, ys = tm.ys;
+    let lo = 0, hi = xs.length - 1;
+    while (hi - lo > 1) {
+      const mid = (lo + hi) >> 1;
+      if (xs[mid] <= t) lo = mid; else hi = mid;
+    }
+    const x0 = xs[lo], x1 = xs[hi], y0 = ys[lo], y1 = ys[hi];
+    const w = x1 > x0 ? (t - x0) / (x1 - x0) : 0;
+    return (y0 + (y1 - y0) * w) / tm.total;
+  }
+
   _span(t) {
     const K = this.keys;
     if (t <= K[0].t) return { i: 0, u: 0 };
     if (t >= K[K.length - 1].t) return { i: K.length - 2, u: 1 };
-    let i = 0; while (i < K.length - 2 && t >= K[i + 1].t) i++;
+    /* map clock time to track progress, then place progress on the authored key
+       spans by their actual length so each key is still hit exactly on time */
+    const prog = this._progress(t);
+    const t0 = K[0].t, t1 = K[K.length - 1].t;
+    let i = 0;
+    while (i < K.length - 2 && t >= K[i + 1].t) i++;
     const a = K[i], b = K[i + 1];
-    return { i, u: b.ease(seg(t, a.t, b.t)) };
+    /* progress of each key boundary, using the same integrated map */
+    if (!this._kp || this._kp.n !== K.length) {
+      const kp = new Float64Array(K.length);
+      for (let q = 0; q < K.length; q++) kp[q] = this._progress(K[q].t);
+      this._kp = { n: K.length, kp: kp };
+    }
+    const kp = this._kp.kp;
+    const p0 = kp[i], p1 = kp[i + 1];
+    const u = p1 > p0 ? clamp01((prog - p0) / (p1 - p0)) : (t >= b.t ? 1 : 0);
+    return { i, u: u };
   }
   /**
    * Non-uniform Catmull-Rom as a cubic Hermite, with tangents weighted by the
@@ -241,10 +351,16 @@ class CameraTrack {
     _crM2.copy(_crT1.copy(p2).sub(p1)).multiplyScalar(d23 / (d12 + d23));
     _crM2.addScaledVector(_crT2.copy(p3).sub(p2), d12 / (d12 + d23));
 
+    /* Smooth magnitude limit. The previous form was a hard clamp
+       (if (l > lim) l = lim), which switches on abruptly on one segment and off
+       on the next. Because the endpoint tangents are shared between adjacent
+       segments, that switch made the tangent itself jump at key boundaries --
+       a second, independent source of the judder. This limiter is C1 everywhere:
+       it is the identity below lim and eases asymptotically toward lim above it,
+       so tangent magnitude changes continuously as the camera leaves a key. */
     const lim = 3 * d12;
-    const l1 = _crM1.length(), l2 = _crM2.length();
-    if (l1 > lim) _crM1.multiplyScalar(lim / l1);
-    if (l2 > lim) _crM2.multiplyScalar(lim / l2);
+    _crM1.multiplyScalar(_softScale(_crM1.length(), lim));
+    _crM2.multiplyScalar(_softScale(_crM2.length(), lim));
 
     const u2 = u * u, u3 = u2 * u;
     const h00 = 2 * u3 - 3 * u2 + 1, h10 = u3 - 2 * u2 + u;
