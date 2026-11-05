@@ -2052,10 +2052,18 @@ function buildStreet(scene, reflector) {
   med.userData.noReflect = true; scene.add(med);
   /* hedge / painted kerb strips on the median */
   const stripMat = mat(0xB9B2A0, { rough: 0.85, flat: false });
+  const stripRedMat = mat(0xB91C1C, { rough: 0.8 });
+  const bStrip = new GB(), bStripRed = new GB();
   for (let x = L.roadXmin + 6; x < L.roadXmax; x += 5.2) {
     if (Math.abs(x) < 60) continue;
-    const s = mesh(new THREE.BoxGeometry(2.4, 0.09, 1.36), (Math.floor(x / 5.2) % 2) ? mat(0xB91C1C, { rough: 0.8 }) : stripMat, x, L.roadY + 0.25, 0);
-    s.userData.noReflect = true; scene.add(s);
+    const isRed = (Math.floor(x / 5.2) % 2) !== 0;
+    (isRed ? bStripRed : bStrip).box(2.4, 0.09, 1.36, { pos: [x, L.roadY + 0.25, 0] });
+  }
+  for (const bb of [bStrip, bStripRed]) {
+    const gm = bb.build(bb === bStripRed ? stripRedMat : stripMat, { vertexColors: false });
+    gm.name = 'medianStrips';
+    gm.children.forEach((c) => { c.userData.noReflect = true; });
+    scene.add(gm);
   }
   /* a few neem trees on the median — Chennai's road trees */
   for (const tx of [-96, -58, 58, 96, 150, -150]) {
@@ -2075,24 +2083,39 @@ function buildStreet(scene, reflector) {
   foot.receiveShadow = true; scene.add(foot); W.foot = foot;
 
   /* granite kerb stones */
+  /* Granite kerb stones. These were 460 separate meshes -- 460 draw calls every
+     frame, in the main pass AND again in the mirror pass, for a row of blocks
+     that can never move. Merged into one mesh via the film's own GB batcher. */
   const kerbMat = mat(0x8C8A82, { rough: 0.72, flat: false, map: TEX.concrete });
+  const bKerb = new GB();
   for (let x = L.roadXmin; x < L.roadXmax; x += 2.0) {
-    const k = mesh(new THREE.BoxGeometry(1.96, L.footY + 0.06, 0.24), kerbMat, x + 1, (L.footY + 0.06) / 2, L.kerbZ - 0.12, true, true);
-    scene.add(k);
+    bKerb.box(1.96, L.footY + 0.06, 0.24, { pos: [x + 1, (L.footY + 0.06) / 2, L.kerbZ - 0.12] });
   }
+  const kerbMesh = bKerb.build(kerbMat, { cast: true, recv: true, vertexColors: false });
+  kerbMesh.name = 'kerbStones';
+  kerbMesh.children.forEach((c) => { c.castShadow = true; c.receiveShadow = true; });
+  scene.add(kerbMesh);
   /* far-side pavement */
   const farFoot = new THREE.Mesh(new THREE.PlaneGeometry(roadW, 5).rotateX(-PI / 2), footMat);
   farFoot.position.set(0, L.footY * 0.9, -13.6); farFoot.receiveShadow = true; scene.add(farFoot);
 
   /* storm-water drains along the kerb */
   const drainMat = mat(0x16191C, { rough: 0.95, metal: 0.2 });
+  /* Drains + grates: 31 drains x (1 body + 6 grates) was ~217 draw calls for
+     geometry that never moves. Two merged meshes now. */
+  const grateMat = mat(0x3A3F45, { metal: 0.7, rough: 0.4 });
+  const bDrain = new GB(), bGrate = new GB();
   for (let x = -220; x < 220; x += 14) {
-    const d = mesh(new THREE.BoxGeometry(1.5, 0.05, 0.5), drainMat, x, L.roadY + 0.006, 10.85);
-    d.userData.noReflect = true; scene.add(d);
+    bDrain.box(1.5, 0.05, 0.5, { pos: [x, L.roadY + 0.006, 10.85] });
     for (let s = 0; s < 6; s++) {
-      const b = mesh(new THREE.BoxGeometry(1.44, 0.02, 0.035), mat(0x3A3F45, { metal: 0.7, rough: 0.4 }), x, L.roadY + 0.03, 10.66 + s * 0.075);
-      b.userData.noReflect = true; scene.add(b);
+      bGrate.box(1.44, 0.02, 0.035, { pos: [x, L.roadY + 0.03, 10.66 + s * 0.075] });
     }
+  }
+  for (const pair of [[bDrain, drainMat, 'drains'], [bGrate, grateMat, 'drainGrates']]) {
+    const gm = pair[0].build(pair[1], { vertexColors: false });
+    gm.name = pair[2];
+    gm.children.forEach((c) => { c.userData.noReflect = true; });
+    scene.add(gm);
   }
 
   /* ---------------------------- street lighting -------------------------- */
@@ -2429,7 +2452,10 @@ function buildSteam() {
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   geo.setAttribute('aSeed', new THREE.BufferAttribute(seed, 1));
   const m = new THREE.ShaderMaterial({
-    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: true,
+    /* NO fog:true. ShaderMaterial defaults to fog:false; enabling fog without
+       fogColor/fogDensity makes three.js refreshFogUniforms() throw on the
+       first draw -- a black screen with a stack trace inside three.js. */
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
     uniforms: { uTime: U.time, uCol: { value: new THREE.Color(0xC8B89A) } },
     vertexShader: `
       attribute float aSeed; uniform float uTime; varying float vA;
@@ -2775,7 +2801,8 @@ function buildRain(scene) {
   sgeo.setAttribute('position', new THREE.BufferAttribute(sp, 3));
   sgeo.setAttribute('aSeed', new THREE.BufferAttribute(ss, 1));
   const sm = new THREE.ShaderMaterial({
-    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: true,
+    /* see buildSteam: fog:true without fog uniforms throws in refreshFogUniforms */
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
     uniforms: { uTime: U.time, uDensity: { value: 1 }, uCol: { value: new THREE.Color(0xFFD9A0) } },
     vertexShader: `
       attribute float aSeed; uniform float uTime, uDensity; varying float vA;
@@ -4851,7 +4878,8 @@ function buildWheelSpray(n = 420) {
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   geo.setAttribute('aSeed', new THREE.BufferAttribute(seed, 2));
   const m = new THREE.ShaderMaterial({
-    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: true,
+    /* see buildSteam: fog:true without fog uniforms throws in refreshFogUniforms */
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
     uniforms: { uTime: U.time, uSpeed: { value: 0 }, uCol: { value: new THREE.Color(0xBFD4E6) } },
     vertexShader: `
       attribute vec2 aSeed; uniform float uTime, uSpeed; varying float vA;
@@ -7178,6 +7206,7 @@ function drawTitleCard(ctx, w, h, S) {
 /*  lens + film treatment                                                      */
 /* -------------------------------------------------------------------------- */
 let _grainPattern = null;
+let _vigCache = null;
 function drawLens(ctx, w, h, S, t) {
   const barH = Math.round(h * 0.5 * (1 - 0.39) * S.letterbox);   // 2.39:1 target
   /* letterbox bars */
@@ -7186,12 +7215,15 @@ function drawLens(ctx, w, h, S, t) {
     ctx.fillRect(0, 0, w, barH);
     ctx.fillRect(0, h - barH, w, barH);
   }
-  /* vignette */
-  const vg = ctx.createRadialGradient(w / 2, h * 0.5, Math.min(w, h) * 0.24, w / 2, h * 0.5, Math.max(w, h) * 0.74);
-  vg.addColorStop(0, 'rgba(0,0,0,0)');
-  vg.addColorStop(0.62, 'rgba(2,4,8,0.22)');
-  vg.addColorStop(1, 'rgba(1,2,5,0.72)');
-  ctx.fillStyle = vg; ctx.fillRect(0, 0, w, h);
+  /* vignette -- constant for a given canvas size, so rebuild only on resize */
+  if (!_vigCache || _vigCache.w !== w || _vigCache.h !== h) {
+    const vg = ctx.createRadialGradient(w / 2, h * 0.5, Math.min(w, h) * 0.24, w / 2, h * 0.5, Math.max(w, h) * 0.74);
+    vg.addColorStop(0, 'rgba(0,0,0,0)');
+    vg.addColorStop(0.62, 'rgba(2,4,8,0.22)');
+    vg.addColorStop(1, 'rgba(1,2,5,0.72)');
+    _vigCache = { w: w, h: h, g: vg };
+  }
+  ctx.fillStyle = _vigCache.g; ctx.fillRect(0, 0, w, h);
 
   /* rain beading on the lens, only when the camera is low and wet */
   const bead = clamp01(S.rain) * S.closeToGround;
@@ -7234,8 +7266,11 @@ function drawLens(ctx, w, h, S, t) {
     gx.putImageData(id, 0, 0);
     _grainPattern = ctx.createPattern(gc, 'repeat');
   }
+  /* Film grain. A full-screen 'overlay' composite is one of the most expensive
+     things a 2D canvas can do and covers millions of pixels every frame.
+     source-over with a low-alpha speck tile reads almost identically. */
   ctx.save();
-  ctx.globalCompositeOperation = 'overlay';
+  ctx.globalAlpha = 0.5;
   ctx.translate((hash1(Math.floor(t * 24)) * 128) | 0, (hash1(Math.floor(t * 24) + 7) * 128) | 0);
   ctx.fillStyle = _grainPattern; ctx.fillRect(-128, -128, w + 256, h + 256);
   ctx.restore();
@@ -7414,7 +7449,7 @@ function buildLights(scene) {
   const key = new THREE.DirectionalLight(0xBFD4F2, 0.85);
   key.position.set(-60, 90, 70);
   key.castShadow = true;
-  key.shadow.mapSize.set(2048, 2048);
+  key.shadow.mapSize.set(1024, 1024);   /* 2048^2 PCF-soft re-renders the scene each frame for one key */
   key.shadow.camera.left = -58; key.shadow.camera.right = 58;
   key.shadow.camera.top = 58; key.shadow.camera.bottom = -58;
   key.shadow.camera.near = 8; key.shadow.camera.far = 340;
@@ -7605,8 +7640,12 @@ async function main() {
   let renderer;
   try {
     renderer = new THREE.WebGLRenderer({
+      /* preserveDrawingBuffer:true makes the driver keep a GPU copy of every
+         frame so drawImage() can read it back -- a large constant cost paid
+         60x a second purely for the optional recorder. Opt in with ?rec. */
       canvas: glc, antialias: true, alpha: false, stencil: false,
-      powerPreference: 'high-performance', preserveDrawingBuffer: true,
+      powerPreference: 'high-performance',
+      preserveDrawingBuffer: !!(window.location && /[?&]rec\b/.test(window.location.search)),
     });
   } catch (err) {
     fatal('WEBGL UNAVAILABLE', 'This browser or device blocked WebGL, so the Chennai Mobility AI film cannot render. Try a desktop browser with hardware acceleration enabled.');
@@ -7622,13 +7661,17 @@ async function main() {
     }, false);
   }
 
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  /* 2x DPR on a 1080p panel is 4x the pixels for no visible gain in a
+     full-screen film. 1.5 keeps text crisp and costs 44% less. */
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
   renderer.setSize(window.innerWidth, window.innerHeight, false);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.28;
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  /* PCFSoft filters 9 taps per fragment; PCF filters 4. At 1024 it is
+     indistinguishable on a moving, rain-blurred night shot. */
+  renderer.shadowMap.type = THREE.PCFShadowMap;
   renderer.setClearColor(0x05070C, 1);
 
   const scene = new THREE.Scene();
@@ -7730,7 +7773,11 @@ async function main() {
     const w = window.innerWidth, h = window.innerHeight;
     const pr = renderer.getPixelRatio();
     renderer.setSize(w, h, false);
-    ow = Math.round(w * pr); oh = Math.round(h * pr);
+    /* The overlay is UI: bars, thin rules, small type and one screen of grain.
+       At 1.5x DPR that is ~2M pixels of 2D fill per frame for detail no one can
+       resolve. Capping at 1x halves the CPU cost and is invisible. */
+    const prHud = Math.min(pr, 1);
+    ow = Math.round(w * prHud); oh = Math.round(h * prHud);
     ovc.width = ow; ovc.height = oh;
     ovc.style.width = w + 'px'; ovc.style.height = h + 'px';
     camera.aspect = w / h;
@@ -7882,9 +7929,19 @@ async function main() {
     lights.key.color.copy(new THREE.Color(0xBFD4F2)).lerp(new THREE.Color(0xFFB066), 1 - S.night);
     lights.key.position.copy(U.sunDir.value).multiplyScalar(180).add(lights.tgt.position);
     lights.fill.intensity = lerp(0.75, 0.42, S.night);
-    lights.key.shadow.autoUpdate = S.closeToGround > 0.35;
+    /* The shadow pass re-renders ~3,400 objects EVERY frame. The key light
+       tracks a sun that moves fractions of a degree per frame, so bake the map
+       at ~8 Hz on ground shots and freeze it when airborne. */
+    lights.key.shadow.autoUpdate = false;
+    if (S.closeToGround > 0.35) {
+      if ((FILM.frames - (FILM._lastShadow | 0)) >= 8) { FILM._lastShadow = FILM.frames; lights.key.shadow.needsUpdate = true; }
+    }
 
     /* the mirror pass only earns its cost when the road is actually in shot */
+    /* The mirror is a SECOND full scene render. At 0.5 of a 1080p canvas that
+       is more pixels than the main pass. 0.35 still reads as a wet road because
+       the reflection is blurred by the ripple normals. */
+    W.reflector.scale = 0.35;
     const wantRefl = W.reflector.enabled && S.reflAmt > 0.02 && S.closeToGround > 0.05;
     if (wantRefl) W.reflector.render(scene, camera, noReflect);
     U.reflAmt.value = wantRefl ? clamp01(S.reflAmt) : 0;

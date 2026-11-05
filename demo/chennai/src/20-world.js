@@ -383,10 +383,18 @@ function buildStreet(scene, reflector) {
   med.userData.noReflect = true; scene.add(med);
   /* hedge / painted kerb strips on the median */
   const stripMat = mat(0xB9B2A0, { rough: 0.85, flat: false });
+  const stripRedMat = mat(0xB91C1C, { rough: 0.8 });
+  const bStrip = new GB(), bStripRed = new GB();
   for (let x = L.roadXmin + 6; x < L.roadXmax; x += 5.2) {
     if (Math.abs(x) < 60) continue;
-    const s = mesh(new THREE.BoxGeometry(2.4, 0.09, 1.36), (Math.floor(x / 5.2) % 2) ? mat(0xB91C1C, { rough: 0.8 }) : stripMat, x, L.roadY + 0.25, 0);
-    s.userData.noReflect = true; scene.add(s);
+    const isRed = (Math.floor(x / 5.2) % 2) !== 0;
+    (isRed ? bStripRed : bStrip).box(2.4, 0.09, 1.36, { pos: [x, L.roadY + 0.25, 0] });
+  }
+  for (const bb of [bStrip, bStripRed]) {
+    const gm = bb.build(bb === bStripRed ? stripRedMat : stripMat, { vertexColors: false });
+    gm.name = 'medianStrips';
+    gm.children.forEach((c) => { c.userData.noReflect = true; });
+    scene.add(gm);
   }
   /* a few neem trees on the median — Chennai's road trees */
   for (const tx of [-96, -58, 58, 96, 150, -150]) {
@@ -406,24 +414,39 @@ function buildStreet(scene, reflector) {
   foot.receiveShadow = true; scene.add(foot); W.foot = foot;
 
   /* granite kerb stones */
+  /* Granite kerb stones. These were 460 separate meshes -- 460 draw calls every
+     frame, in the main pass AND again in the mirror pass, for a row of blocks
+     that can never move. Merged into one mesh via the film's own GB batcher. */
   const kerbMat = mat(0x8C8A82, { rough: 0.72, flat: false, map: TEX.concrete });
+  const bKerb = new GB();
   for (let x = L.roadXmin; x < L.roadXmax; x += 2.0) {
-    const k = mesh(new THREE.BoxGeometry(1.96, L.footY + 0.06, 0.24), kerbMat, x + 1, (L.footY + 0.06) / 2, L.kerbZ - 0.12, true, true);
-    scene.add(k);
+    bKerb.box(1.96, L.footY + 0.06, 0.24, { pos: [x + 1, (L.footY + 0.06) / 2, L.kerbZ - 0.12] });
   }
+  const kerbMesh = bKerb.build(kerbMat, { cast: true, recv: true, vertexColors: false });
+  kerbMesh.name = 'kerbStones';
+  kerbMesh.children.forEach((c) => { c.castShadow = true; c.receiveShadow = true; });
+  scene.add(kerbMesh);
   /* far-side pavement */
   const farFoot = new THREE.Mesh(new THREE.PlaneGeometry(roadW, 5).rotateX(-PI / 2), footMat);
   farFoot.position.set(0, L.footY * 0.9, -13.6); farFoot.receiveShadow = true; scene.add(farFoot);
 
   /* storm-water drains along the kerb */
   const drainMat = mat(0x16191C, { rough: 0.95, metal: 0.2 });
+  /* Drains + grates: 31 drains x (1 body + 6 grates) was ~217 draw calls for
+     geometry that never moves. Two merged meshes now. */
+  const grateMat = mat(0x3A3F45, { metal: 0.7, rough: 0.4 });
+  const bDrain = new GB(), bGrate = new GB();
   for (let x = -220; x < 220; x += 14) {
-    const d = mesh(new THREE.BoxGeometry(1.5, 0.05, 0.5), drainMat, x, L.roadY + 0.006, 10.85);
-    d.userData.noReflect = true; scene.add(d);
+    bDrain.box(1.5, 0.05, 0.5, { pos: [x, L.roadY + 0.006, 10.85] });
     for (let s = 0; s < 6; s++) {
-      const b = mesh(new THREE.BoxGeometry(1.44, 0.02, 0.035), mat(0x3A3F45, { metal: 0.7, rough: 0.4 }), x, L.roadY + 0.03, 10.66 + s * 0.075);
-      b.userData.noReflect = true; scene.add(b);
+      bGrate.box(1.44, 0.02, 0.035, { pos: [x, L.roadY + 0.03, 10.66 + s * 0.075] });
     }
+  }
+  for (const pair of [[bDrain, drainMat, 'drains'], [bGrate, grateMat, 'drainGrates']]) {
+    const gm = pair[0].build(pair[1], { vertexColors: false });
+    gm.name = pair[2];
+    gm.children.forEach((c) => { c.userData.noReflect = true; });
+    scene.add(gm);
   }
 
   /* ---------------------------- street lighting -------------------------- */
@@ -760,7 +783,10 @@ function buildSteam() {
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   geo.setAttribute('aSeed', new THREE.BufferAttribute(seed, 1));
   const m = new THREE.ShaderMaterial({
-    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: true,
+    /* NO fog:true. ShaderMaterial defaults to fog:false; enabling fog without
+       fogColor/fogDensity makes three.js refreshFogUniforms() throw on the
+       first draw -- a black screen with a stack trace inside three.js. */
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
     uniforms: { uTime: U.time, uCol: { value: new THREE.Color(0xC8B89A) } },
     vertexShader: `
       attribute float aSeed; uniform float uTime; varying float vA;
@@ -1106,7 +1132,8 @@ function buildRain(scene) {
   sgeo.setAttribute('position', new THREE.BufferAttribute(sp, 3));
   sgeo.setAttribute('aSeed', new THREE.BufferAttribute(ss, 1));
   const sm = new THREE.ShaderMaterial({
-    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: true,
+    /* see buildSteam: fog:true without fog uniforms throws in refreshFogUniforms */
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
     uniforms: { uTime: U.time, uDensity: { value: 1 }, uCol: { value: new THREE.Color(0xFFD9A0) } },
     vertexShader: `
       attribute float aSeed; uniform float uTime, uDensity; varying float vA;

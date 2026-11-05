@@ -334,7 +334,8 @@ function buildWheelSpray(n = 420) {
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   geo.setAttribute('aSeed', new THREE.BufferAttribute(seed, 2));
   const m = new THREE.ShaderMaterial({
-    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: true,
+    /* see buildSteam: fog:true without fog uniforms throws in refreshFogUniforms */
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
     uniforms: { uTime: U.time, uSpeed: { value: 0 }, uCol: { value: new THREE.Color(0xBFD4E6) } },
     vertexShader: `
       attribute vec2 aSeed; uniform float uTime, uSpeed; varying float vA;

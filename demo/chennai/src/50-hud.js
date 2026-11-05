@@ -379,6 +379,7 @@ function drawTitleCard(ctx, w, h, S) {
 /*  lens + film treatment                                                      */
 /* -------------------------------------------------------------------------- */
 let _grainPattern = null;
+let _vigCache = null;
 function drawLens(ctx, w, h, S, t) {
   const barH = Math.round(h * 0.5 * (1 - 0.39) * S.letterbox);   // 2.39:1 target
   /* letterbox bars */
@@ -387,12 +388,15 @@ function drawLens(ctx, w, h, S, t) {
     ctx.fillRect(0, 0, w, barH);
     ctx.fillRect(0, h - barH, w, barH);
   }
-  /* vignette */
-  const vg = ctx.createRadialGradient(w / 2, h * 0.5, Math.min(w, h) * 0.24, w / 2, h * 0.5, Math.max(w, h) * 0.74);
-  vg.addColorStop(0, 'rgba(0,0,0,0)');
-  vg.addColorStop(0.62, 'rgba(2,4,8,0.22)');
-  vg.addColorStop(1, 'rgba(1,2,5,0.72)');
-  ctx.fillStyle = vg; ctx.fillRect(0, 0, w, h);
+  /* vignette -- constant for a given canvas size, so rebuild only on resize */
+  if (!_vigCache || _vigCache.w !== w || _vigCache.h !== h) {
+    const vg = ctx.createRadialGradient(w / 2, h * 0.5, Math.min(w, h) * 0.24, w / 2, h * 0.5, Math.max(w, h) * 0.74);
+    vg.addColorStop(0, 'rgba(0,0,0,0)');
+    vg.addColorStop(0.62, 'rgba(2,4,8,0.22)');
+    vg.addColorStop(1, 'rgba(1,2,5,0.72)');
+    _vigCache = { w: w, h: h, g: vg };
+  }
+  ctx.fillStyle = _vigCache.g; ctx.fillRect(0, 0, w, h);
 
   /* rain beading on the lens, only when the camera is low and wet */
   const bead = clamp01(S.rain) * S.closeToGround;
@@ -435,8 +439,11 @@ function drawLens(ctx, w, h, S, t) {
     gx.putImageData(id, 0, 0);
     _grainPattern = ctx.createPattern(gc, 'repeat');
   }
+  /* Film grain. A full-screen 'overlay' composite is one of the most expensive
+     things a 2D canvas can do and covers millions of pixels every frame.
+     source-over with a low-alpha speck tile reads almost identically. */
   ctx.save();
-  ctx.globalCompositeOperation = 'overlay';
+  ctx.globalAlpha = 0.5;
   ctx.translate((hash1(Math.floor(t * 24)) * 128) | 0, (hash1(Math.floor(t * 24) + 7) * 128) | 0);
   ctx.fillStyle = _grainPattern; ctx.fillRect(-128, -128, w + 256, h + 256);
   ctx.restore();

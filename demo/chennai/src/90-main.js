@@ -127,7 +127,7 @@ function buildLights(scene) {
   const key = new THREE.DirectionalLight(0xBFD4F2, 0.85);
   key.position.set(-60, 90, 70);
   key.castShadow = true;
-  key.shadow.mapSize.set(2048, 2048);
+  key.shadow.mapSize.set(1024, 1024);   /* 2048^2 PCF-soft re-renders the scene each frame for one key */
   key.shadow.camera.left = -58; key.shadow.camera.right = 58;
   key.shadow.camera.top = 58; key.shadow.camera.bottom = -58;
   key.shadow.camera.near = 8; key.shadow.camera.far = 340;
@@ -318,8 +318,12 @@ async function main() {
   let renderer;
   try {
     renderer = new THREE.WebGLRenderer({
+      /* preserveDrawingBuffer:true makes the driver keep a GPU copy of every
+         frame so drawImage() can read it back -- a large constant cost paid
+         60x a second purely for the optional recorder. Opt in with ?rec. */
       canvas: glc, antialias: true, alpha: false, stencil: false,
-      powerPreference: 'high-performance', preserveDrawingBuffer: true,
+      powerPreference: 'high-performance',
+      preserveDrawingBuffer: !!(window.location && /[?&]rec\b/.test(window.location.search)),
     });
   } catch (err) {
     fatal('WEBGL UNAVAILABLE', 'This browser or device blocked WebGL, so the Chennai Mobility AI film cannot render. Try a desktop browser with hardware acceleration enabled.');
@@ -335,13 +339,17 @@ async function main() {
     }, false);
   }
 
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  /* 2x DPR on a 1080p panel is 4x the pixels for no visible gain in a
+     full-screen film. 1.5 keeps text crisp and costs 44% less. */
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
   renderer.setSize(window.innerWidth, window.innerHeight, false);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.28;
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  /* PCFSoft filters 9 taps per fragment; PCF filters 4. At 1024 it is
+     indistinguishable on a moving, rain-blurred night shot. */
+  renderer.shadowMap.type = THREE.PCFShadowMap;
   renderer.setClearColor(0x05070C, 1);
 
   const scene = new THREE.Scene();
@@ -443,7 +451,11 @@ async function main() {
     const w = window.innerWidth, h = window.innerHeight;
     const pr = renderer.getPixelRatio();
     renderer.setSize(w, h, false);
-    ow = Math.round(w * pr); oh = Math.round(h * pr);
+    /* The overlay is UI: bars, thin rules, small type and one screen of grain.
+       At 1.5x DPR that is ~2M pixels of 2D fill per frame for detail no one can
+       resolve. Capping at 1x halves the CPU cost and is invisible. */
+    const prHud = Math.min(pr, 1);
+    ow = Math.round(w * prHud); oh = Math.round(h * prHud);
     ovc.width = ow; ovc.height = oh;
     ovc.style.width = w + 'px'; ovc.style.height = h + 'px';
     camera.aspect = w / h;
@@ -595,9 +607,19 @@ async function main() {
     lights.key.color.copy(new THREE.Color(0xBFD4F2)).lerp(new THREE.Color(0xFFB066), 1 - S.night);
     lights.key.position.copy(U.sunDir.value).multiplyScalar(180).add(lights.tgt.position);
     lights.fill.intensity = lerp(0.75, 0.42, S.night);
-    lights.key.shadow.autoUpdate = S.closeToGround > 0.35;
+    /* The shadow pass re-renders ~3,400 objects EVERY frame. The key light
+       tracks a sun that moves fractions of a degree per frame, so bake the map
+       at ~8 Hz on ground shots and freeze it when airborne. */
+    lights.key.shadow.autoUpdate = false;
+    if (S.closeToGround > 0.35) {
+      if ((FILM.frames - (FILM._lastShadow | 0)) >= 8) { FILM._lastShadow = FILM.frames; lights.key.shadow.needsUpdate = true; }
+    }
 
     /* the mirror pass only earns its cost when the road is actually in shot */
+    /* The mirror is a SECOND full scene render. At 0.5 of a 1080p canvas that
+       is more pixels than the main pass. 0.35 still reads as a wet road because
+       the reflection is blurred by the ripple normals. */
+    W.reflector.scale = 0.35;
     const wantRefl = W.reflector.enabled && S.reflAmt > 0.02 && S.closeToGround > 0.05;
     if (wantRefl) W.reflector.render(scene, camera, noReflect);
     U.reflAmt.value = wantRefl ? clamp01(S.reflAmt) : 0;
