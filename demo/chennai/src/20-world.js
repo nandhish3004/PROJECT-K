@@ -65,6 +65,9 @@ class PlanarReflector {
       uTexMatrix: { value: new THREE.Matrix4() },
     };
     this._n = new THREE.Vector3(0, 1, 0);
+    /* saved across the mirrored pass so the main pass keeps the fog-tinted
+       clear colour main.js sets every frame instead of snapping to black */
+    this._prevCol = new THREE.Color();
   }
   setSize(w, h) {
     const W = Math.max(64, Math.floor(w * this.scale)), H = Math.max(64, Math.floor(h * this.scale));
@@ -109,7 +112,8 @@ class PlanarReflector {
     const r = this.renderer;
     const prevRT = r.getRenderTarget();
     const prevXr = r.xr.enabled, prevShadow = r.shadowMap.enabled;
-    const prevClear = r.getClearAlpha();
+    const prevClearAlpha = r.getClearAlpha();
+    r.getClearColor(this._prevCol);
     const hideList = [];
     for (const o of hidden) if (o.visible) { hideList.push(o); o.visible = false; }
     r.xr.enabled = false;
@@ -122,7 +126,7 @@ class PlanarReflector {
     r.setRenderTarget(prevRT);
     r.xr.enabled = prevXr;
     r.shadowMap.enabled = prevShadow;
-    r.setClearColor(0x000000, prevClear);
+    r.setClearColor(this._prevCol, prevClearAlpha);
   }
 }
 

@@ -75,11 +75,11 @@ function makeEnvironment(renderer) {
 
 /* ------------------------------------------------------------------- lights */
 function buildLights(scene) {
-  const hemi = new THREE.HemisphereLight(0x2A3A5C, 0x0A0D12, 0.55);
+  const hemi = new THREE.HemisphereLight(0x3A4E75, 0x141A26, 0.85);
   scene.add(hemi);
 
   /* One and only one shadow-casting light. Everything else is a practical. */
-  const key = new THREE.DirectionalLight(0xBFD4F2, 0.42);
+  const key = new THREE.DirectionalLight(0xBFD4F2, 0.85);
   key.position.set(-60, 90, 70);
   key.castShadow = true;
   key.shadow.mapSize.set(2048, 2048);
@@ -94,7 +94,7 @@ function buildLights(scene) {
   scene.add(key);
 
   /* low warm fill from the shopfronts and the tea kadai side of the street */
-  const fill = new THREE.DirectionalLight(0xE08A2A, 0.16);
+  const fill = new THREE.DirectionalLight(0xE08A2A, 0.30);
   fill.position.set(24, 14, 40);
   scene.add(fill);
 
@@ -286,13 +286,17 @@ async function main() {
   renderer.setSize(window.innerWidth, window.innerHeight, false);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.06;
+  renderer.toneMappingExposure = 1.28;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.setClearColor(0x05070C, 1);
 
   const scene = new THREE.Scene();
-  scene.fog = new THREE.FogExp2(0x0B132B, 0.0125);
+  scene.fog = new THREE.FogExp2(0x121C33, 0.0125);
+  /* Safety net: even if the sky dome were ever clipped or failed to compile,
+     the background clears to atmospheric indigo rather than pure black, so the
+     film can never present as a black rectangle. The sky mesh draws over it. */
+  scene.background = new THREE.Color(0x121C33);
 
   const camera = new THREE.PerspectiveCamera(58, window.innerWidth / window.innerHeight, 0.012, 1400);
   camera.position.set(-104, 0.4, 6.6);
@@ -465,7 +469,7 @@ async function main() {
 
   /* ---- per-frame camera -------------------------------------------------- */
   const camPos = v3(), camTarget = v3(), followOff = v3(), anchorNow = v3();
-  const FOG_NIGHT = new THREE.Color(0x0B132B), FOG_DUSK = new THREE.Color(0x7A4A2C);
+  const FOG_NIGHT = new THREE.Color(0x121C33), FOG_DUSK = new THREE.Color(0x7A4A2C);
   let lastNow = performance.now();
 
   function sampleCamera(t, S) {
@@ -517,17 +521,27 @@ async function main() {
     drive(t, W, S);
     sampleCamera(t, S);
 
+    /* The sky dome IS the background. Keep it centred on the camera and scaled
+       to sit just inside whatever far plane this shot needs -- the wide street
+       shots pull `far` down to 620, which would otherwise clip a 1500-radius
+       dome completely and leave the frame showing nothing but the clear colour. */
+    if (W.sky) {
+      const SKY_R = 1500;
+      W.sky.scale.setScalar(Math.min(SKY_R, camera.far * 0.72) / SKY_R);
+      W.sky.position.copy(camera.position);
+    }
+
     /* atmosphere */
     scene.fog.density = S.fogDensity;
     scene.fog.color.copy(FOG_NIGHT).lerp(FOG_DUSK, 1 - S.night);
     U.fogCol.value.copy(scene.fog.color);
     renderer.setClearColor(scene.fog.color, 1);
-    lights.hemi.intensity = lerp(0.62, 0.30, S.night);
+    lights.hemi.intensity = lerp(1.30, 0.85, S.night);
     lights.hemi.color.copy(new THREE.Color(0x2A3A5C)).lerp(new THREE.Color(0xFFD9A0), 1 - S.night);
-    lights.key.intensity = lerp(2.85, 0.42, S.night);
+    lights.key.intensity = lerp(2.85, 0.95, S.night);
     lights.key.color.copy(new THREE.Color(0xBFD4F2)).lerp(new THREE.Color(0xFFB066), 1 - S.night);
     lights.key.position.copy(U.sunDir.value).multiplyScalar(180).add(lights.tgt.position);
-    lights.fill.intensity = lerp(0.62, 0.16, S.night);
+    lights.fill.intensity = lerp(0.75, 0.42, S.night);
     lights.key.shadow.autoUpdate = S.closeToGround > 0.35;
 
     /* the mirror pass only earns its cost when the road is actually in shot */
