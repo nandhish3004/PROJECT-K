@@ -37,6 +37,12 @@
     box-shadow:0 0 8px var(--lcd);animation:pulse 2.6s ease-in-out infinite}
   @keyframes pulse{0%,100%{opacity:.35}50%{opacity:1}}
 
+  /* ---- always-on telemetry: proves the loop is alive and what it reports ---- */
+  #diag{left:18px;bottom:16px;z-index:6;pointer-events:none;font-family:var(--mono);
+    font-size:10px;letter-spacing:.06em;line-height:1.55;color:#FFD98A;
+    text-shadow:0 1px 3px #000,0 0 12px rgba(0,0,0,.9);
+    background:rgba(6,10,16,.55);border-left:2px solid var(--sodium);
+    padding:7px 11px;border-radius:0 3px 3px 0;white-space:pre}
   #rec{right:18px;bottom:44px;appearance:none;border:1px solid rgba(185,28,28,.55);
     background:rgba(10,14,20,.62);color:#F3D3D3;font-family:var(--mono);font-size:10px;
     font-weight:700;letter-spacing:.14em;padding:8px 13px;border-radius:3px;cursor:pointer;
@@ -48,7 +54,7 @@
 
   /* ---- boot card: only ever visible before the first rendered frame ---- */
   #boot{position:fixed;inset:0;z-index:9;display:grid;place-items:center;
-    background:radial-gradient(120% 90% at 50% 45%,#0C1420 0%,#04070B 70%)}
+    background:radial-gradient(120% 90% at 50% 45%,#1B2A3D 0%,#0A1018 70%)}
   #boot .in{width:min(560px,84vw);text-align:center}
   #boot h1{font-family:var(--cond);font-weight:700;font-size:clamp(21px,3.4vw,32px);
     letter-spacing:.16em;margin:0 0 10px;color:#fff;text-transform:uppercase}
@@ -60,13 +66,14 @@
   #boot .rule{margin:22px auto 0;width:64px;height:1px;background:rgba(245,158,11,.4)}
 
   /* ---- fatal card ---- */
+  /* Deliberately LIGHT so a failure can never be mistaken for a black screen. */
   #fatal{position:fixed;inset:0;z-index:20;display:grid;place-items:center;
-    background:radial-gradient(120% 90% at 50% 45%,#14100C 0%,#04070B 72%);padding:24px}
+    background:#F7EEDC;padding:24px}
   #fatal[hidden]{display:none}
-  #fatal .fcard{max-width:620px;border:1px solid rgba(245,158,11,.3);border-left:3px solid var(--sodium);
-    background:rgba(12,16,22,.86);padding:28px 30px;border-radius:4px}
-  #fatal h1{font-family:var(--cond);font-size:20px;letter-spacing:.16em;margin:0 0 12px;color:var(--sodium);text-transform:uppercase}
-  #fatal p{font-size:12.5px;line-height:1.72;color:#D5E2EC;margin:0}
+  #fatal .fcard{max-width:660px;border:3px solid #B91C1C;border-radius:6px;
+    background:#FFFBF2;padding:30px 32px;box-shadow:0 18px 60px rgba(0,0,0,.5)}
+  #fatal h1{font-family:var(--cond);font-size:24px;letter-spacing:.10em;margin:0 0 14px;color:#8A1414;text-transform:uppercase}
+  #fatal p{font-size:15px;line-height:1.65;color:#111820;margin:0}
 
   @media (max-width:640px){
     #brand{top:22px;left:12px}
@@ -99,6 +106,8 @@
 
 <div id="chip" class="ui"><span class="dot"></span>Real-time procedural WebGL &middot; no stock footage &middot; autonomous 02:30 timeline</div>
 <button id="rec" class="ui" type="button" title="Export a 1080p WebM of the full 150-second timeline (R)">&#9679; Record 1080p</button>
+
+<div id="diag"></div>
 
 <div id="fatal" hidden></div>
 
@@ -7294,9 +7303,54 @@ const FILM = {
 /* ---------------------------------------------------------------- fatal card */
 function fatal(title, body) {
   const el = document.getElementById('fatal');
-  if (!el) return;
-  el.hidden = false;
-  el.innerHTML = `<div class="fcard"><h1>${title}</h1><p>${body}</p></div>`;
+  if (el) {
+    el.hidden = false;
+    el.removeAttribute('hidden');          /* the attribute alone wins in some browsers */
+    el.style.display = 'block';
+    el.innerHTML = '<div class="fcard"><h1>' + title + '</h1><p>' + body + '</p></div>';
+  }
+  const d = document.getElementById('diag');
+  if (d) d.textContent = 'FATAL: ' + title;
+  try { if (window.console) console.error('[fatal]', title, body); } catch (e) {}
+}
+
+/* --------------------------------------------------------------------------
+   Nothing is allowed to fail silently. A black rectangle is indistinguishable
+   from a dead page, so every failure path -- uncaught error, rejected boot
+   promise, lost GPU context, or a loop that simply never paints -- has to put
+   something legible on screen.
+   -------------------------------------------------------------------------- */
+let __painted = false;
+function armBootWatchdog() {
+  setTimeout(function () {
+    if (__painted) return;
+    const el = document.getElementById('fatal');
+    if (el && el.hidden) {
+      fatal('NOTHING RENDERED',
+        'The page loaded but the film never painted a single frame, so WebGL '
+        + 'could not start in this browser. Check that hardware acceleration is '
+        + 'enabled (chrome://gpu), then open the developer console with F12 and '
+        + 'copy whatever is printed in red.');
+    }
+  }, 20000);
+}
+if (typeof window !== 'undefined' && window.addEventListener) {
+  window.addEventListener('error', function (e) {
+    if (!__painted) fatal('SCRIPT ERROR', String((e && e.message) || 'unknown error'));
+  });
+  window.addEventListener('unhandledrejection', function (e) {
+    const r = e && e.reason;
+    if (!__painted) fatal('BOOT REJECTED', String((r && r.message) || r));
+  });
+}
+let GLVER = 'WebGL ?';
+function describeGL(renderer) {
+  try {
+    const g = renderer.getContext();
+    GLVER = (renderer.capabilities && renderer.capabilities.isWebGL2) ? 'WebGL2' : 'WebGL1';
+    const dbg = g.getExtension && g.getExtension('WEBGL_debug_renderer_info');
+    if (dbg) GLVER += ' \u00b7 ' + String(g.getParameter(dbg.UNMASKED_RENDERER_WEBGL)).slice(0, 42);
+  } catch (e) {}
 }
 
 /* ------------------------------------------------------------- environment */
@@ -7559,6 +7613,14 @@ async function main() {
     return;
   }
   if (!renderer.getContext()) { fatal('WEBGL UNAVAILABLE', 'No WebGL context could be created.'); return; }
+  describeGL(renderer);
+  armBootWatchdog();
+  if (glc.addEventListener) {
+    glc.addEventListener('webglcontextlost', function (ev) {
+      ev.preventDefault();
+      fatal('GPU CONTEXT LOST', 'The browser dropped the WebGL context, so rendering stopped. This is usually a driver or GPU-memory problem. Reload the page.');
+    }, false);
+  }
 
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.setSize(window.innerWidth, window.innerHeight, false);
@@ -7828,6 +7890,22 @@ async function main() {
     U.reflAmt.value = wantRefl ? clamp01(S.reflAmt) : 0;
 
     renderer.render(scene, camera);
+    __painted = true;
+
+    /* Always-on telemetry. If the film ever looks wrong, this row says what the
+       loop actually believes: clock, canvas size, draw calls, near/far, GPU. */
+    if (FILM.frames % 15 === 0) {
+      const dEl = document.getElementById('diag');
+      if (dEl) {
+        const sz = renderer.getSize(new THREE.Vector2());
+        const calls = (renderer.info && renderer.info.render) ? renderer.info.render.calls : -1;
+        dEl.textContent =
+          't ' + t.toFixed(2) + ' / ' + DURATION + ' s    ' + Math.round(HUD.fps) + ' fps    ' + HUD.quality +
+          '\ncanvas ' + Math.round(sz.x) + 'x' + Math.round(sz.y) + '    dpr ' + renderer.getPixelRatio().toFixed(2) +
+          '\ncalls ' + calls + '    far ' + Math.round(camera.far) + '    frames ' + FILM.frames +
+          '\n' + GLVER;
+      }
+    }
 
     /* HUD */
     octx.setTransform(1, 0, 0, 1, 0, 0);

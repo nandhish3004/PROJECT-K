@@ -16,9 +16,54 @@ const FILM = {
 /* ---------------------------------------------------------------- fatal card */
 function fatal(title, body) {
   const el = document.getElementById('fatal');
-  if (!el) return;
-  el.hidden = false;
-  el.innerHTML = `<div class="fcard"><h1>${title}</h1><p>${body}</p></div>`;
+  if (el) {
+    el.hidden = false;
+    el.removeAttribute('hidden');          /* the attribute alone wins in some browsers */
+    el.style.display = 'block';
+    el.innerHTML = '<div class="fcard"><h1>' + title + '</h1><p>' + body + '</p></div>';
+  }
+  const d = document.getElementById('diag');
+  if (d) d.textContent = 'FATAL: ' + title;
+  try { if (window.console) console.error('[fatal]', title, body); } catch (e) {}
+}
+
+/* --------------------------------------------------------------------------
+   Nothing is allowed to fail silently. A black rectangle is indistinguishable
+   from a dead page, so every failure path -- uncaught error, rejected boot
+   promise, lost GPU context, or a loop that simply never paints -- has to put
+   something legible on screen.
+   -------------------------------------------------------------------------- */
+let __painted = false;
+function armBootWatchdog() {
+  setTimeout(function () {
+    if (__painted) return;
+    const el = document.getElementById('fatal');
+    if (el && el.hidden) {
+      fatal('NOTHING RENDERED',
+        'The page loaded but the film never painted a single frame, so WebGL '
+        + 'could not start in this browser. Check that hardware acceleration is '
+        + 'enabled (chrome://gpu), then open the developer console with F12 and '
+        + 'copy whatever is printed in red.');
+    }
+  }, 20000);
+}
+if (typeof window !== 'undefined' && window.addEventListener) {
+  window.addEventListener('error', function (e) {
+    if (!__painted) fatal('SCRIPT ERROR', String((e && e.message) || 'unknown error'));
+  });
+  window.addEventListener('unhandledrejection', function (e) {
+    const r = e && e.reason;
+    if (!__painted) fatal('BOOT REJECTED', String((r && r.message) || r));
+  });
+}
+let GLVER = 'WebGL ?';
+function describeGL(renderer) {
+  try {
+    const g = renderer.getContext();
+    GLVER = (renderer.capabilities && renderer.capabilities.isWebGL2) ? 'WebGL2' : 'WebGL1';
+    const dbg = g.getExtension && g.getExtension('WEBGL_debug_renderer_info');
+    if (dbg) GLVER += ' \u00b7 ' + String(g.getParameter(dbg.UNMASKED_RENDERER_WEBGL)).slice(0, 42);
+  } catch (e) {}
 }
 
 /* ------------------------------------------------------------- environment */
@@ -281,6 +326,14 @@ async function main() {
     return;
   }
   if (!renderer.getContext()) { fatal('WEBGL UNAVAILABLE', 'No WebGL context could be created.'); return; }
+  describeGL(renderer);
+  armBootWatchdog();
+  if (glc.addEventListener) {
+    glc.addEventListener('webglcontextlost', function (ev) {
+      ev.preventDefault();
+      fatal('GPU CONTEXT LOST', 'The browser dropped the WebGL context, so rendering stopped. This is usually a driver or GPU-memory problem. Reload the page.');
+    }, false);
+  }
 
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.setSize(window.innerWidth, window.innerHeight, false);
@@ -550,6 +603,22 @@ async function main() {
     U.reflAmt.value = wantRefl ? clamp01(S.reflAmt) : 0;
 
     renderer.render(scene, camera);
+    __painted = true;
+
+    /* Always-on telemetry. If the film ever looks wrong, this row says what the
+       loop actually believes: clock, canvas size, draw calls, near/far, GPU. */
+    if (FILM.frames % 15 === 0) {
+      const dEl = document.getElementById('diag');
+      if (dEl) {
+        const sz = renderer.getSize(new THREE.Vector2());
+        const calls = (renderer.info && renderer.info.render) ? renderer.info.render.calls : -1;
+        dEl.textContent =
+          't ' + t.toFixed(2) + ' / ' + DURATION + ' s    ' + Math.round(HUD.fps) + ' fps    ' + HUD.quality +
+          '\ncanvas ' + Math.round(sz.x) + 'x' + Math.round(sz.y) + '    dpr ' + renderer.getPixelRatio().toFixed(2) +
+          '\ncalls ' + calls + '    far ' + Math.round(camera.far) + '    frames ' + FILM.frames +
+          '\n' + GLVER;
+      }
+    }
 
     /* HUD */
     octx.setTransform(1, 0, 0, 1, 0, 0);
