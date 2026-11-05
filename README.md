@@ -1,14 +1,108 @@
-# PROJECT-K — HygroScope
+# PROJECT-K — Team Zypher demo films
 
-**HygroScope** finds hidden damp and water leaks in apartment walls using a phone:
-one ambient photo, one torch-lit photo, one 30-second contact microphone recording —
-fused into a single risk score with the physics shown on screen.
+Two real-time WebGL films, each shipped as **one self-contained HTML file** with vendored
+three.js and base64 audio inlined: no build step at runtime, no server, no CDN, opens
+straight off disk and records cleanly.
+
+1. **Chennai Mobility AI** — a 2½-minute *autonomous* cinematic for a telephony transit
+   assistant serving button-phone commuters in Chennai, engineered around the real MTC,
+   Chennai Metro, Southern Railway and MRTS networks.
+2. **HygroScope** — finds hidden damp and water leaks in apartment walls using a phone:
+   one ambient photo, one torch-lit photo, one 30-second contact microphone recording,
+   fused into a single risk score with the physics shown on screen.
 
 Team **Zypher** · National hackathon submission · 2026
 
 ---
 
-## ▶ Live demo (3D film, runs in the browser)
+## ▶ Chennai Mobility AI — 2½-minute autonomous 3D film
+
+**https://nandhish3004.github.io/project-k/chennai/**
+
+A cinematic, photorealistic real-time WebGL film for **Chennai Mobility AI**, an intelligent
+*telephony* transit assistant for button-phone commuters. Five acts of thirty seconds, **thirty-four
+shots on one continuous camera move**, and **zero buttons**: the picture starts on the first frame,
+runs to `02:30:00` on its own, holds on the title card and loops.
+
+| Act | Time | What happens |
+| --- | --- | --- |
+| I · The digital divide at street level | `0:00–0:30` | Evening rain on Poonamallee High Road. A low dolly across puddles mirroring sodium lamps into an MTC bus shelter, where an elderly commuter holds a keypad phone while smartphone commuters are ringed by red-glitch failure banners citing 5,400+ real CUMTA grievances. |
+| II · Cellular ingestion & 8 kHz streaming | `0:30–1:00` | Macro on the rubber keypad: the green call key depresses, eleven DTMF digits dial `044 2479 4705`, amber acoustic ripples pulse off the microphone, and the camera climbs out through the shelter mouth, up a lattice mast to a **FastAPI Telephony Gateway (8 kHz PCM Stream)** node. |
+| III · Dual-lane 3D routing & grievance brain | `1:00–1:30` | Bird's-eye of Chennai. An amber GTFS spline wipes on from Thandalam to Porur Roundtana, MTC Route 54 runs it, a floating badge reads `GTFS SCHEDULED TIMETABLE | Bus 54/54E | ~35 mins | Headway: 8-10 mins (Zero Hallucination)`, and a second lane branches grievances to the Porur depot queue. |
+| IV · DTMF keypad "1" press & 148-char SMS | `1:30–2:00` | The camera dives 260 m back into the commuter's hands. Key `1` glows amber and mechanically depresses — in-band DTMF, 697 + 1209 Hz — the call drops, the handset vibrates, and the monochrome green LCD reveals the **148-character** SMS. |
+| V · Real-world impact & CUMTA telemetry | `2:00–2:30` | Route 54 berths at the kerb, air brakes, the commuter walks bench → kerb → doorway and steps aboard. The storm breaks into a golden-hour panorama over Napier Bridge and Chennai Central while glass telemetry renders **12,480** inbound calls, **58% Tanglish / 30% Madras Bashai / 12% Formal Tamil**, **99.2%** SMS delivered. |
+
+**Engineered from the real city, not a generic set piece.** Every transit system is a working,
+moving model of something that actually exists:
+
+- **MTC buses** — chrome-oxide red over a cream skirt, amber route boards in Tamil and English
+  (`54 / 54E` → `போரூர் ரவுண்டானா / PORUR ROUNDTANA`), two bi-folding kerb-side doors, conductor's
+  fare box, depot stencilling, 46 vehicles of live traffic across six lanes with wet-road light streaks.
+- **Chennai Metro Green Line (Corridor 2)** — the operational Central ↔ St. Thomas Mount line, elevated
+  along Jawaharlal Nehru Salai where it really crosses Poonamallee High Road at Koyambedu. U-girder
+  viaduct, platform screen doors, CMRL roundels, and three-car stainless sets on **750 V DC third rail —
+  so no pantographs**. The under-construction Corridor 4 is deliberately *not* used.
+- **Southern Railway Chennai suburban (Beach ↔ Tambaram)** — four tracks at 1.676 m gauge on concrete
+  sleepers, **25 kV AC overhead with pantographs**, droppers and catenary, colour-light signals cycling
+  their aspects, high-level island platforms with yellow tactile strips, ICF stainless EMUs plus a
+  sixteen-car express.
+- **MRTS (Beach ↔ Velachery)** — twin circular piers beside the Buckingham Canal, CHEPAUK station, two rakes.
+- **CUMTA** — the Chennai Unified Metropolitan Transport Authority is why all four modes share one frame.
+- The corridor is the real fourteen-stop Poonamallee High Road (NH 48) sequence, Thandalam → Poonamallee →
+  Mangadu → Ramapuram → SIMATS Highway → Porur Bypass → Porur Roundtana → MGR Nagar → Alapakkam →
+  Koyambedu → Aminjikarai → Kilpauk → Chennai Central, with the Cooum, Napier Bridge and the Coromandel surf.
+
+**Audio** is embedded and entirely generated or voiced in-browser: thirteen Indian-English narration
+stems, two spoken **Tamil** call turns (burned-in Tamil subtitles + transliteration + translation), and
+procedural foley — rain, distant bus diesel whose RPM tracks the vehicle, rubber key clicks, all sixteen
+DTMF symbols, an SMS alert beep, air brakes, horns and thunder. The Tamil turns are band-limited through
+a 320 Hz–3.3 kHz telephone chain so they sound like a real call.
+
+**The thin amber progress line** sits at the very top of the viewport and tracks the 150-second timeline,
+with act segment ticks, roman numerals and a `MM:SS:FF / 02:30:00` readout. It has no click targets.
+
+| Control | Action |
+| --- | --- |
+| *(none)* | The film plays itself. Nothing needs clicking. |
+| tap anywhere | Unlocks browser audio and enters fullscreen. The picture never waits for it. |
+| `R` / `● Record` | Exports the full 150 s as a 1080p WebM with soundtrack (frame-locked to 1/60). |
+| `M` | Mute |
+
+OrbitControls are **never constructed** — the camera is a Catmull-Rom track driven entirely by the
+master clock. Rendered with volumetric fog, PBR wet-road shaders and a planar reflector for the puddles.
+
+### Building the Chennai film
+
+```bash
+python3 demo/chennai/build_film.py
+```
+
+Concatenates `demo/chennai/src/*.js` in filename order, inlines vendored three.js r160 and base64s the
+fifteen audio stems, and writes both `demo/chennai/chennai-mobility-film.html` and
+`docs/chennai/index.html` — one **1.8 MB** self-contained file, offline-openable.
+
+### Verifying it without a browser
+
+There is no browser in CI, so two headless harnesses assert everything that would otherwise fail
+silently at runtime:
+
+```bash
+node .harness/verify.js         # 36 checks: scene graph, camera path, timeline, choreography
+node .harness/verify-audio.js   # 14 checks: the whole Web Audio graph against a strict mock
+```
+
+`verify.js` builds the entire world under three.js in Node (5,850 scene nodes), then samples the camera
+at 60 fps for all 9,000 frames and asserts it is finite, in bounds, never underground, never clips the
+shelter roof / back panel / columns, never overshoots a spline segment, and never lurches in speed. It
+runs `drive(t)` across the full 150 s checking for NaN, confirms it is **idempotent on re-seek** (the
+auto-loop depends on that), and checks the cue sheet against the *measured* MP3 durations so no two
+spoken stems overlap. `verify-audio.js` mocks Web Audio strictly enough to catch the faults that only
+browsers report — `exponentialRampToValueAtTime(0)`, negative or NaN scheduling times, a source started
+twice or stopped before it starts — and fires all 71 cues plus all 16 DTMF symbols.
+
+---
+
+## ▶ HygroScope — live demo (3D film, runs in the browser)
 
 **https://nandhish3004.github.io/project-k/**
 
@@ -53,7 +147,13 @@ Headphones recommended. Total runtime ≈ 6 minutes across 16 chapters.
 
 | Path | Contents |
 | --- | --- |
-| `docs/index.html` | **The deployed film** (GitHub Pages source, `/docs`) |
+| `docs/index.html` | Landing page for both films (GitHub Pages source, `/docs`) |
+| `docs/chennai/index.html` | **The deployed Chennai Mobility AI film** |
+| `demo/chennai/index.src.html` | Chennai film shell + CSS — edit this, then rebuild |
+| `demo/chennai/src/*.js` | Chennai film source, eleven modules concatenated in filename order |
+| `demo/chennai/build_film.py` | Chennai film build script |
+| `demo/chennai/audio/*.mp3` | 13 narration stems + 2 Tamil call turns (inlined as base64) |
+| `.harness/verify.js`, `.harness/verify-audio.js` | Headless verification harnesses (see above) |
 | `demo/film3/hygroscope-film.src.html` | Readable source of the film — edit this, then rebuild |
 | `demo/film3/hygroscope-film.html` | Built copy of the film |
 | `demo/film3/vendor/three.min.js` | three.js r160 UMD build, vendored from npm (inlined at build time) |
@@ -64,7 +164,7 @@ Headphones recommended. Total runtime ≈ 6 minutes across 16 chapters.
 | `HACKATHON-NOTES.md` | Full UI/UX + frontend + backend audit of the production app |
 | `procare-hackathon-fixes.patch` | PWA / seed-data / deploy-config patch for the production repo |
 
-### Rebuilding the film
+### Rebuilding the HygroScope film
 
 ```bash
 python3 - <<'PY'

@@ -22,6 +22,10 @@
   .tag{display:inline-block;font-size:10px;font-weight:900;letter-spacing:.14em;border-radius:999px;padding:5px 11px;margin-bottom:10px}
   .tag.go{background:var(--teal);color:#fff}
   .tag.arch{background:rgba(255,255,255,.14);color:#cfe8e3}
+  .tag.amber{background:#EA580C;color:#fff}
+  a.card.amber{border-color:rgba(245,158,11,.34)}
+  a.card.amber:hover{border-color:#F59E0B;background:rgba(245,158,11,.09)}
+  a.card.amber .go-line{color:#F59E0B}
   a.card h2{font-size:21px;color:#fff;margin-bottom:6px}
   a.card p{font-size:13px;color:#a9c4bf;line-height:1.55}
   a.card .go-line{margin-top:12px;font-weight:800;color:var(--mint);font-size:13px}
@@ -35,6 +39,15 @@
   <p class="sub">Interactive 3D films, rendered live in your browser. The submission cut is two minutes,
      fullscreen, with voice-over — and it can record itself to a 1080p video file.</p>
   <div class="cards">
+    <a class="card amber" href="./chennai/">
+      <span class="tag amber">NEW · 2:30 · AUTONOMOUS</span>
+      <h2>Chennai Mobility AI</h2>
+      <p>Five acts, thirty-four shots, one continuous camera move over a rain-soaked Poonamallee High Road.
+         An elderly commuter with a keypad phone calls the CUMTA helpline; 8&nbsp;kHz telephony becomes a
+         GTFS-bound MTC Route&nbsp;54 answer, confirmed by an in-band DTMF &lsquo;1&rsquo; and a 148-character SMS.
+         CMRL Green Line, Southern Railway suburban and MRTS all run live behind it. No buttons &mdash; it plays itself.</p>
+      <div class="go-line">&#9654; Open the 2&#189;-minute film &rarr;</div>
+    </a>
     <a class="card" href="./saathi/">
       <span class="tag go">SUBMISSION · 1:59</span>
       <h2>SAATHI in the hills</h2>
@@ -50,8 +63,9 @@
       <div class="go-line">Open archive film →</div>
     </a>
   </div>
-  <small>SAATHI cut rebuilt from the team showcase source · <code>SAATHI-CUT-NOTES.md</code> in the repository root
-     documents the runtime cut, voice-over mix and every claim correction.</small>
+  <small>Each film is one self-contained HTML file &mdash; vendored three.js r160 and base64 audio inlined, no CDN,
+     no build step at runtime, opens straight off disk. <code>SAATHI-CUT-NOTES.md</code> and <code>README.md</code>
+     in the repository root document the cuts, the voice-over mix and every claim correction.</small>
 </main>
 </body>
 </html>
