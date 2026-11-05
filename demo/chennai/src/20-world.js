@@ -501,13 +501,17 @@ function buildStreet(scene, reflector) {
     head.add(cone);
     scene.add(head);
 
-    /* a real light only for the four central lamps, where the action is */
+    /* a real light only for the central lamps, where the action is --
+       but every head still needs the full userData contract, because
+       cinematics animates intensity/glow/lens/cone on all of them. */
+    let pl = null;
     if (i >= -2 && i <= 2) {
-      const pl = new THREE.PointLight(C.sodium, 620, 62, 2.0);
+      pl = new THREE.PointLight(C.sodium, 620, 62, 2.0);
       pl.position.set(0, -0.15, 0);
       head.add(pl);
     }
 
+    head.userData = { head, lens, glow, glow2, cone, light: pl };
     W.lamps.push(head);
 
     const poolMat = new THREE.MeshBasicMaterial({ map: TEX.pool, color: C.sodium, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false, fog: true });

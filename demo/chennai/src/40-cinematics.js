@@ -436,11 +436,13 @@ function drive(t, W, S) {
     const lm = W.lamps[i], u = lm.userData;
     const fl = 0.94 + 0.06 * Math.sin(t * (7.3 + i) + i * 2.1) + (hash2(Math.floor(t * 9), i) > 0.985 ? -0.28 : 0);
     const k = fl * S.lampDim;
-    u.light.intensity = 620 * k;
-    u.glow.material.opacity = 0.85 * k;
-    u.glow2.material.opacity = 0.30 * k;
-    u.lens.material.emissiveIntensity = 5.2 * k;
-    u.cone.material.uniforms.uOpacity.value = 0.30 * k * (0.4 + 0.6 * S.rain);
+    /* Every one of these is optional: distant lamps carry no real light, and
+       a merged head may carry fewer pieces. Animating what exists is enough. */
+    if (u.light) u.light.intensity = 620 * k;
+    if (u.glow) u.glow.material.opacity = 0.85 * k;
+    if (u.glow2) u.glow2.material.opacity = 0.30 * k;
+    if (u.lens) u.lens.material.emissiveIntensity = 5.2 * k;
+    if (u.cone) u.cone.material.uniforms.uOpacity.value = 0.30 * k * (0.4 + 0.6 * S.rain);
   }
   if (W.pools) for (const p of W.pools) p.material.opacity = 0.5 * S.lampDim * (0.5 + 0.5 * S.night);
   if (W.teaKadai) {
