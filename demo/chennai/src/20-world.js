@@ -450,28 +450,81 @@ function buildStreet(scene, reflector) {
   }
 
   /* ---------------------------- street lighting -------------------------- */
+  /* Eleven lamps used to be eleven Groups of ~17 meshes each -- about 190 draw
+     calls for identical geometry -- plus eleven real PointLights. Every one of
+     those lights is evaluated per fragment on every lit object, which is the
+     most expensive thing in this scene after resolution. The arms, bases, poles
+     and hoods are now merged into two meshes, and only the four lamps nearest
+     the camera action carry a real light; the rest keep their emissive lens,
+     glow sprite and baked ground pool, which is what actually reads on screen. */
+  const bLampSteel = new GB(), bLampHood = new GB();
+  const LAMP_COUNT = 11;
   for (let i = -5; i <= 5; i++) {
     const x = i * 26;
-    const lamp = buildStreetLamp();
-    lamp.position.set(x, 0, L.lampZ);
-    lamp.rotation.y = PI;                       // arm reaches out over the road
-    scene.add(lamp);
-    W.lamps.push(lamp);
+    const yRot = PI;                                  /* arm reaches over the road */
 
-    /* sodium light pool baked onto the wet ground — cheap, and it is what the
-       puddles end up reflecting hardest */
-    const pool = new THREE.Mesh(
-      new THREE.PlaneGeometry(19, 34).rotateX(-PI / 2),
-      new THREE.MeshBasicMaterial({ map: TEX.pool, color: C.sodium, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false, fog: true })
-    );
+    /* steel: base, pole, swept arm (as a chain of short segments) */
+    const cosR = Math.cos(yRot), sinR = Math.sin(yRot);
+    const rot = (lx, lz) => [x + lx * cosR + lz * sinR, -lx * sinR + lz * cosR];
+    const [bx, bz] = rot(0, 0);
+    bLampSteel.cyl(0.26, 0.34, 0.5, 10, { pos: [bx, 0.25, bz] });
+    bLampSteel.cyl(0.11, 0.17, L.lampH, 10, { pos: [bx, L.lampH / 2 + 0.4, bz] });
+    for (let seg = 0; seg < 4; seg++) {
+      const f = seg / 4, f2 = (seg + 1) / 4;
+      const az = -L.lampArm * f, az2 = -L.lampArm * f2;
+      const ay = L.lampH + 0.36 + Math.sin(f * Math.PI * 0.5) * 0.26 - f * 0.06;
+      const ay2 = L.lampH + 0.36 + Math.sin(f2 * Math.PI * 0.5) * 0.26 - f2 * 0.06;
+      const [sx, sz] = rot(0, az);
+      const [ex, ez] = rot(0, az2);
+      const dx = ex - sx, dy = ay2 - ay, dz = ez - sz;
+      const len = Math.sqrt(dx * dx + dy * dy + dz * dz) || 0.01;
+      const mid = [(sx + ex) / 2, (ay + ay2) / 2, (sz + ez) / 2];
+      /* tilt the cylinder onto the segment */
+      const pitch = Math.acos(Math.max(-1, Math.min(1, dy / len)));
+      const yaw = Math.atan2(dx, dz);
+      bLampSteel.cyl(0.075, 0.075, len, 6, { pos: mid, rot: [pitch, yaw, 0] });
+    }
+    const [hx, hz] = rot(0, -L.lampArm);
+    bLampHood.cyl(0.42, 0.52, 0.2, 10, { pos: [hx, L.lampH + 0.26, hz] });
+
+    /* the emissive lens + glow + cone + ground pool are what the eye reads */
+    const head = new THREE.Group();
+    head.position.set(hx, L.lampH + 0.16, hz);
+    const lens = mesh(new THREE.CylinderGeometry(0.40, 0.40, 0.05, 12), new THREE.MeshStandardMaterial({
+      color: 0xFFE3A8, emissive: 0xFFC24A, emissiveIntensity: 5.2, roughness: 0.25, metalness: 0,
+    }), 0, -0.02, 0);
+    lens.scale.z = 0.62; head.add(lens);
+    const glow = glowSprite(C.sodiumHot, 6.4, 0.85); glow.position.set(0, -0.05, 0); head.add(glow);
+    const glow2 = glowSprite(C.sodium, 13.0, 0.30); glow2.position.set(0, -0.05, 0); head.add(glow2);
+    const cone = buildLightCone(2.5, L.lampH + 0.1, C.sodium, 0.30);
+    cone.position.set(0, -(L.lampH + 0.1) / 2 + 0.05, 0);
+    head.add(cone);
+    scene.add(head);
+
+    /* a real light only for the four central lamps, where the action is */
+    if (i >= -2 && i <= 2) {
+      const pl = new THREE.PointLight(C.sodium, 620, 62, 2.0);
+      pl.position.set(0, -0.15, 0);
+      head.add(pl);
+    }
+
+    W.lamps.push(head);
+
+    const poolMat = new THREE.MeshBasicMaterial({ map: TEX.pool, color: C.sodium, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false, fog: true });
+    const pool = new THREE.Mesh(new THREE.PlaneGeometry(19, 34).rotateX(-PI / 2), poolMat);
     pool.position.set(x - 0.6, L.roadY + 0.012, L.lampZ - L.lampArm - 1.2);
-    pool.renderOrder = 2;
-    pool.userData.noReflect = true;
+    pool.renderOrder = 2; pool.userData.noReflect = true;
     scene.add(pool); W.pools.push(pool);
 
-    const pool2 = pool.clone(); pool2.material = pool.material.clone();
+    const pool2 = pool.clone(); pool2.material = poolMat;
     pool2.scale.set(0.62, 1, 0.5); pool2.position.set(x - 0.6, L.footY + 0.012, L.lampZ + 1.4);
     pool2.userData.noReflect = true; scene.add(pool2); W.pools.push(pool2);
+  }
+  {
+    const steelMesh = bLampSteel.build(mat(0x2E3439, { metal: 0.72, rough: 0.46, flat: false }), { cast: true, vertexColors: false });
+    steelMesh.name = 'lampSteel'; scene.add(steelMesh);
+    const hoodMesh = bLampHood.build(mat(0x3B4148, { metal: 0.6, rough: 0.4 }), { cast: true, vertexColors: false });
+    hoodMesh.name = 'lampHoods'; scene.add(hoodMesh);
   }
 
   /* ------------------------------ bus shelter ---------------------------- */

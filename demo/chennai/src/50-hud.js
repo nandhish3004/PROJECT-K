@@ -402,7 +402,8 @@ function drawLens(ctx, w, h, S, t) {
   const bead = clamp01(S.rain) * S.closeToGround;
   if (bead > 0.02) {
     ctx.save(); ctx.globalCompositeOperation = 'lighter';
-    for (let i = 0; i < 34; i++) {
+    const BEADS = (typeof PRESET !== 'undefined' && PRESET.beads) || 34;
+    for (let i = 0; i < BEADS; i++) {
       const bx = hash2(i, 3) * w, by = hash2(i, 9) * h;
       const br = 2 + hash2(i, 17) * 9;
       const sl = (Math.sin(t * (0.25 + hash2(i, 5) * 0.4) + i) * 0.5 + 0.5);
@@ -442,11 +443,17 @@ function drawLens(ctx, w, h, S, t) {
   /* Film grain. A full-screen 'overlay' composite is one of the most expensive
      things a 2D canvas can do and covers millions of pixels every frame.
      source-over with a low-alpha speck tile reads almost identically. */
-  ctx.save();
-  ctx.globalAlpha = 0.5;
-  ctx.translate((hash1(Math.floor(t * 24)) * 128) | 0, (hash1(Math.floor(t * 24) + 7) * 128) | 0);
-  ctx.fillStyle = _grainPattern; ctx.fillRect(-128, -128, w + 256, h + 256);
-  ctx.restore();
+  /* Grain is a full-screen 2D fill: cheap-looking, not cheap. On the
+     presentation tier it is skipped entirely -- at projector distance and
+     through a video codec it is invisible, and it costs ~2M pixel writes a
+     frame on hardware that has better things to do. */
+  if (typeof PRESET === 'undefined' || PRESET.grain) {
+    ctx.save();
+    ctx.globalAlpha = 0.5;
+    ctx.translate((hash1(Math.floor(t * 24)) * 128) | 0, (hash1(Math.floor(t * 24) + 7) * 128) | 0);
+    ctx.fillStyle = _grainPattern; ctx.fillRect(-128, -128, w + 256, h + 256);
+    ctx.restore();
+  }
 
   /* scanline breath on the LCD-heavy acts */
   const scan = Math.max(window01(t, 108, 124, 1.5, 1.5), window01(t, 33, 47, 1.5, 1.5)) * 0.5;

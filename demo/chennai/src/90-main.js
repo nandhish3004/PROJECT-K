@@ -7,9 +7,43 @@
    and an optional recorder.
    ========================================================================== */
 
+/* --------------------------------------------------------------------------
+   QUALITY PRESETS
+
+   A presentation cannot be a science experiment. The adaptive governor still
+   exists as a safety net, but the film now STARTS at a tier that is known to
+   hold frame rate on modest hardware, and only ever steps DOWN from there. It
+   used to start at ULTRA and take ~2 s of visibly stuttering frames to discover
+   it had to back off, which is the worst possible first impression.
+
+   Override with the URL:
+     ?q=high    prettier  (reflections + shadows + 1.5x DPR) for recording
+     ?q=low     cheapest
+     (default)  presentation: smooth first, detail second
+   -------------------------------------------------------------------------- */
+const PRESETS = {
+  high:         { dpr: 1.5, reflect: true,  shadows: true,  start: 3, grain: true,  beads: 34 },
+  /* The default: what a live demo gets. No mirror pass, NO shadow pass (each is
+     a full extra scene render), grain off, fewer lens beads, and the drawing
+     buffer capped at 720p and scaled up by CSS. On a projector that is
+     indistinguishable and several times cheaper. */
+  presentation: { dpr: 1.0, reflect: false, shadows: false, start: 2, grain: false, beads: 8, maxPx: 1280 * 720 },
+  low:          { dpr: 0.85, reflect: false, shadows: false, start: 1, grain: false, beads: 8 },
+};
+function pickPreset() {
+  try {
+    const q = (window.location && window.location.search || '').toLowerCase();
+    if (/[?&]q=high\b/.test(q)) return 'high';
+    if (/[?&]q=low\b/.test(q)) return 'low';
+  } catch (e) {}
+  return 'presentation';
+}
+const PRESET_NAME = pickPreset();
+const PRESET = PRESETS[PRESET_NAME];
+
 const FILM = {
   t: 0, running: true, speed: 1, hold: 9,
-  frames: 0, fps: 60, msAvg: 8, quality: 3,
+  frames: 0, fps: 60, msAvg: 8, quality: PRESET.start,
   recording: false, recFixed: true,
 };
 
@@ -361,14 +395,15 @@ async function main() {
     }, false);
   }
 
-  /* 2x DPR on a 1080p panel is 4x the pixels for no visible gain in a
-     full-screen film. 1.5 keeps text crisp and costs 44% less. */
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+  /* Resolution follows the preset. 2x DPR on a 1080p panel is 4x the pixels for
+     no visible gain in a full-screen film; the presentation tier renders at 1x
+     device pixels, which is the single largest saving available. */
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, PRESET.dpr));
   renderer.setSize(window.innerWidth, window.innerHeight, false);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.28;
-  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.enabled = !!PRESET.shadows;
   /* PCFSoft filters 9 taps per fragment; PCF filters 4. At 1024 it is
      indistinguishable on a moving, rain-blurred night shot. */
   renderer.shadowMap.type = THREE.PCFShadowMap;
@@ -471,7 +506,17 @@ async function main() {
   let ow = 0, oh = 0;
   function resize() {
     const w = window.innerWidth, h = window.innerHeight;
-    const pr = renderer.getPixelRatio();
+    let pr = renderer.getPixelRatio();
+
+    /* Cap total pixels. Shading cost is per-pixel, so this is the single
+       strongest lever available: at the presentation tier we never shade more
+       than ~0.9 MP no matter how large the window is, and the browser scales
+       the result up with CSS for free (the GPU's texture filtering does it). */
+    if (PRESET.maxPx) {
+      const want = w * h * pr * pr;
+      if (want > PRESET.maxPx) pr = Math.max(0.5, pr * Math.sqrt(PRESET.maxPx / want));
+    }
+    renderer.setPixelRatio(pr);
     renderer.setSize(w, h, false);
     /* The overlay is UI: bars, thin rules, small type and one screen of grain.
        At 1.5x DPR that is ~2M pixels of 2D fill per frame for detail no one can
@@ -537,15 +582,21 @@ async function main() {
   /* ---- adaptive quality ------------------------------------------------- */
   function adapt(ms) {
     FILM.msAvg = FILM.msAvg * 0.94 + ms * 0.06;
-    if (FILM.frames % 90) return;
+    /* 90 frames (~1.5 s) before the governor even looks was too slow to rescue
+       a bad first impression. Sample every 20 frames. */
+    if (FILM.frames % 20) return;
     const pr = renderer.getPixelRatio();
-    if (FILM.msAvg > 21 && FILM.quality > 0) {
+    /* 21 ms (~48 fps) was far too forgiving: a 30 ms budget reads as lag on a
+       projector. Step down at 15 ms, and never step back up beyond the tier we
+       started in -- climbing mid-presentation is how you get a hitch at the
+       worst moment. */
+    if (FILM.msAvg > 15 && FILM.quality > 0) {
       FILM.quality--;
       if (FILM.quality === 2) { renderer.setPixelRatio(Math.min(1.25, pr)); resize(); }
       else if (FILM.quality === 1) { renderer.setPixelRatio(1); resize(); W.reflector.scale = 0.4; }
       else { W.reflector.enabled = false; }
       HUD.quality = ['ULTRA', 'HIGH', 'BALANCED', 'PERFORMANCE'][3 - FILM.quality] || 'PERFORMANCE';
-    } else if (FILM.msAvg < 11 && FILM.quality < 3) {
+    } else if (FILM.msAvg < 9 && FILM.quality < Math.min(3, PRESET.start)) {
       FILM.quality++;
       if (FILM.quality === 1) { W.reflector.enabled = true; }
       else if (FILM.quality === 2) { W.reflector.scale = 0.6; renderer.setPixelRatio(1.25); resize(); }
@@ -642,7 +693,11 @@ async function main() {
        is more pixels than the main pass. 0.35 still reads as a wet road because
        the reflection is blurred by the ripple normals. */
     W.reflector.scale = 0.35;
-    const wantRefl = W.reflector.enabled && S.reflAmt > 0.02 && S.closeToGround > 0.05;
+    /* The mirror is a SECOND full scene render. On the presentation tier it is
+       off entirely: the wet road still reads wet from the specular response and
+       the ripple normals, and this is the second-largest saving after DPR. */
+    const wantRefl = PRESET.reflect && W.reflector.enabled
+      && S.reflAmt > 0.02 && S.closeToGround > 0.05;
     if (wantRefl) W.reflector.render(scene, camera, noReflect);
     U.reflAmt.value = wantRefl ? clamp01(S.reflAmt) : 0;
 
@@ -657,7 +712,7 @@ async function main() {
         const sz = renderer.getSize(new THREE.Vector2());
         const calls = (renderer.info && renderer.info.render) ? renderer.info.render.calls : -1;
         dEl.textContent =
-          't ' + t.toFixed(2) + ' / ' + DURATION + ' s    ' + Math.round(HUD.fps) + ' fps    ' + HUD.quality +
+          't ' + t.toFixed(2) + ' / ' + DURATION + ' s    ' + Math.round(HUD.fps) + ' fps    ' + HUD.quality + ' (' + PRESET_NAME + ')' +
           '\ncanvas ' + Math.round(sz.x) + 'x' + Math.round(sz.y) + '    dpr ' + renderer.getPixelRatio().toFixed(2) +
           '\ncalls ' + calls + '    far ' + Math.round(camera.far) + '    frames ' + FILM.frames +
           '\n' + GLVER + '    build ' + BUILD_ID;

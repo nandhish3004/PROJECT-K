@@ -473,13 +473,34 @@ function roundedBoxGeo(w, h, d, r, bevel = 0.004) {
 function mesh(geo, mat, x = 0, y = 0, z = 0, castS = false, recvS = false) {
   const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = castS; m.receiveShadow = recvS; return m;
 }
+/* --------------------------------------------------------------------------
+   Material cache.
+
+   mat() used to build a fresh MeshStandardMaterial on every call. The scene
+   makes ~3,800 of them, so ~3,800 distinct material objects meant ~3,800
+   material binds and uniform uploads per frame for a handful of visually
+   identical surfaces. Almost every caller passes the same small set of colours
+   and roughness values, so keying on the exact parameters collapses that to a
+   few dozen. Materials are shared, not cloned, which is exactly what the GPU
+   wants: fewer state changes, fewer uniforms, more consistent draw batches.
+
+   Anything that needs to MUTATE a material must still ask for its own; the
+   cache is keyed on every parameter that affects the shader, so two logically
+   different surfaces never collide.
+   -------------------------------------------------------------------------- */
+const _matCache = new Map();
 function mat(color, { rough = 0.75, metal = 0.0, emis = 0, emisC = null, flat = true, opacity = 1, transparent = false, side = null, map = null, env = 1 } = {}) {
+  const key = color + '|' + rough + '|' + metal + '|' + emis + '|' + emisC + '|' + (flat ? 1 : 0)
+    + '|' + opacity + '|' + (transparent ? 1 : 0) + '|' + side + '|' + (map ? (map.uuid || map.id || 'm') : 0) + '|' + env;
+  const hit = _matCache.get(key);
+  if (hit) return hit;
   const m = new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: metal, flatShading: flat });
   if (emis) { m.emissive = new THREE.Color(emisC == null ? color : emisC); m.emissiveIntensity = emis; }
   if (opacity < 1 || transparent) { m.transparent = true; m.opacity = opacity; }
   if (side) m.side = side;
   if (map) m.map = map;
   m.envMapIntensity = env;
+  _matCache.set(key, m);
   return m;
 }
 /** Additive glow sprite (radial gradient) — cheap volumetric bloom substitute. */

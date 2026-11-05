@@ -611,13 +611,34 @@ function roundedBoxGeo(w, h, d, r, bevel = 0.004) {
 function mesh(geo, mat, x = 0, y = 0, z = 0, castS = false, recvS = false) {
   const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = castS; m.receiveShadow = recvS; return m;
 }
+/* --------------------------------------------------------------------------
+   Material cache.
+
+   mat() used to build a fresh MeshStandardMaterial on every call. The scene
+   makes ~3,800 of them, so ~3,800 distinct material objects meant ~3,800
+   material binds and uniform uploads per frame for a handful of visually
+   identical surfaces. Almost every caller passes the same small set of colours
+   and roughness values, so keying on the exact parameters collapses that to a
+   few dozen. Materials are shared, not cloned, which is exactly what the GPU
+   wants: fewer state changes, fewer uniforms, more consistent draw batches.
+
+   Anything that needs to MUTATE a material must still ask for its own; the
+   cache is keyed on every parameter that affects the shader, so two logically
+   different surfaces never collide.
+   -------------------------------------------------------------------------- */
+const _matCache = new Map();
 function mat(color, { rough = 0.75, metal = 0.0, emis = 0, emisC = null, flat = true, opacity = 1, transparent = false, side = null, map = null, env = 1 } = {}) {
+  const key = color + '|' + rough + '|' + metal + '|' + emis + '|' + emisC + '|' + (flat ? 1 : 0)
+    + '|' + opacity + '|' + (transparent ? 1 : 0) + '|' + side + '|' + (map ? (map.uuid || map.id || 'm') : 0) + '|' + env;
+  const hit = _matCache.get(key);
+  if (hit) return hit;
   const m = new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: metal, flatShading: flat });
   if (emis) { m.emissive = new THREE.Color(emisC == null ? color : emisC); m.emissiveIntensity = emis; }
   if (opacity < 1 || transparent) { m.transparent = true; m.opacity = opacity; }
   if (side) m.side = side;
   if (map) m.map = map;
   m.envMapIntensity = env;
+  _matCache.set(key, m);
   return m;
 }
 /** Additive glow sprite (radial gradient) — cheap volumetric bloom substitute. */
@@ -2250,28 +2271,81 @@ function buildStreet(scene, reflector) {
   }
 
   /* ---------------------------- street lighting -------------------------- */
+  /* Eleven lamps used to be eleven Groups of ~17 meshes each -- about 190 draw
+     calls for identical geometry -- plus eleven real PointLights. Every one of
+     those lights is evaluated per fragment on every lit object, which is the
+     most expensive thing in this scene after resolution. The arms, bases, poles
+     and hoods are now merged into two meshes, and only the four lamps nearest
+     the camera action carry a real light; the rest keep their emissive lens,
+     glow sprite and baked ground pool, which is what actually reads on screen. */
+  const bLampSteel = new GB(), bLampHood = new GB();
+  const LAMP_COUNT = 11;
   for (let i = -5; i <= 5; i++) {
     const x = i * 26;
-    const lamp = buildStreetLamp();
-    lamp.position.set(x, 0, L.lampZ);
-    lamp.rotation.y = PI;                       // arm reaches out over the road
-    scene.add(lamp);
-    W.lamps.push(lamp);
+    const yRot = PI;                                  /* arm reaches over the road */
 
-    /* sodium light pool baked onto the wet ground — cheap, and it is what the
-       puddles end up reflecting hardest */
-    const pool = new THREE.Mesh(
-      new THREE.PlaneGeometry(19, 34).rotateX(-PI / 2),
-      new THREE.MeshBasicMaterial({ map: TEX.pool, color: C.sodium, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false, fog: true })
-    );
+    /* steel: base, pole, swept arm (as a chain of short segments) */
+    const cosR = Math.cos(yRot), sinR = Math.sin(yRot);
+    const rot = (lx, lz) => [x + lx * cosR + lz * sinR, -lx * sinR + lz * cosR];
+    const [bx, bz] = rot(0, 0);
+    bLampSteel.cyl(0.26, 0.34, 0.5, 10, { pos: [bx, 0.25, bz] });
+    bLampSteel.cyl(0.11, 0.17, L.lampH, 10, { pos: [bx, L.lampH / 2 + 0.4, bz] });
+    for (let seg = 0; seg < 4; seg++) {
+      const f = seg / 4, f2 = (seg + 1) / 4;
+      const az = -L.lampArm * f, az2 = -L.lampArm * f2;
+      const ay = L.lampH + 0.36 + Math.sin(f * Math.PI * 0.5) * 0.26 - f * 0.06;
+      const ay2 = L.lampH + 0.36 + Math.sin(f2 * Math.PI * 0.5) * 0.26 - f2 * 0.06;
+      const [sx, sz] = rot(0, az);
+      const [ex, ez] = rot(0, az2);
+      const dx = ex - sx, dy = ay2 - ay, dz = ez - sz;
+      const len = Math.sqrt(dx * dx + dy * dy + dz * dz) || 0.01;
+      const mid = [(sx + ex) / 2, (ay + ay2) / 2, (sz + ez) / 2];
+      /* tilt the cylinder onto the segment */
+      const pitch = Math.acos(Math.max(-1, Math.min(1, dy / len)));
+      const yaw = Math.atan2(dx, dz);
+      bLampSteel.cyl(0.075, 0.075, len, 6, { pos: mid, rot: [pitch, yaw, 0] });
+    }
+    const [hx, hz] = rot(0, -L.lampArm);
+    bLampHood.cyl(0.42, 0.52, 0.2, 10, { pos: [hx, L.lampH + 0.26, hz] });
+
+    /* the emissive lens + glow + cone + ground pool are what the eye reads */
+    const head = new THREE.Group();
+    head.position.set(hx, L.lampH + 0.16, hz);
+    const lens = mesh(new THREE.CylinderGeometry(0.40, 0.40, 0.05, 12), new THREE.MeshStandardMaterial({
+      color: 0xFFE3A8, emissive: 0xFFC24A, emissiveIntensity: 5.2, roughness: 0.25, metalness: 0,
+    }), 0, -0.02, 0);
+    lens.scale.z = 0.62; head.add(lens);
+    const glow = glowSprite(C.sodiumHot, 6.4, 0.85); glow.position.set(0, -0.05, 0); head.add(glow);
+    const glow2 = glowSprite(C.sodium, 13.0, 0.30); glow2.position.set(0, -0.05, 0); head.add(glow2);
+    const cone = buildLightCone(2.5, L.lampH + 0.1, C.sodium, 0.30);
+    cone.position.set(0, -(L.lampH + 0.1) / 2 + 0.05, 0);
+    head.add(cone);
+    scene.add(head);
+
+    /* a real light only for the four central lamps, where the action is */
+    if (i >= -2 && i <= 2) {
+      const pl = new THREE.PointLight(C.sodium, 620, 62, 2.0);
+      pl.position.set(0, -0.15, 0);
+      head.add(pl);
+    }
+
+    W.lamps.push(head);
+
+    const poolMat = new THREE.MeshBasicMaterial({ map: TEX.pool, color: C.sodium, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false, fog: true });
+    const pool = new THREE.Mesh(new THREE.PlaneGeometry(19, 34).rotateX(-PI / 2), poolMat);
     pool.position.set(x - 0.6, L.roadY + 0.012, L.lampZ - L.lampArm - 1.2);
-    pool.renderOrder = 2;
-    pool.userData.noReflect = true;
+    pool.renderOrder = 2; pool.userData.noReflect = true;
     scene.add(pool); W.pools.push(pool);
 
-    const pool2 = pool.clone(); pool2.material = pool.material.clone();
+    const pool2 = pool.clone(); pool2.material = poolMat;
     pool2.scale.set(0.62, 1, 0.5); pool2.position.set(x - 0.6, L.footY + 0.012, L.lampZ + 1.4);
     pool2.userData.noReflect = true; scene.add(pool2); W.pools.push(pool2);
+  }
+  {
+    const steelMesh = bLampSteel.build(mat(0x2E3439, { metal: 0.72, rough: 0.46, flat: false }), { cast: true, vertexColors: false });
+    steelMesh.name = 'lampSteel'; scene.add(steelMesh);
+    const hoodMesh = bLampHood.build(mat(0x3B4148, { metal: 0.6, rough: 0.4 }), { cast: true, vertexColors: false });
+    hoodMesh.name = 'lampHoods'; scene.add(hoodMesh);
   }
 
   /* ------------------------------ bus shelter ---------------------------- */
@@ -7360,7 +7434,8 @@ function drawLens(ctx, w, h, S, t) {
   const bead = clamp01(S.rain) * S.closeToGround;
   if (bead > 0.02) {
     ctx.save(); ctx.globalCompositeOperation = 'lighter';
-    for (let i = 0; i < 34; i++) {
+    const BEADS = (typeof PRESET !== 'undefined' && PRESET.beads) || 34;
+    for (let i = 0; i < BEADS; i++) {
       const bx = hash2(i, 3) * w, by = hash2(i, 9) * h;
       const br = 2 + hash2(i, 17) * 9;
       const sl = (Math.sin(t * (0.25 + hash2(i, 5) * 0.4) + i) * 0.5 + 0.5);
@@ -7400,11 +7475,17 @@ function drawLens(ctx, w, h, S, t) {
   /* Film grain. A full-screen 'overlay' composite is one of the most expensive
      things a 2D canvas can do and covers millions of pixels every frame.
      source-over with a low-alpha speck tile reads almost identically. */
-  ctx.save();
-  ctx.globalAlpha = 0.5;
-  ctx.translate((hash1(Math.floor(t * 24)) * 128) | 0, (hash1(Math.floor(t * 24) + 7) * 128) | 0);
-  ctx.fillStyle = _grainPattern; ctx.fillRect(-128, -128, w + 256, h + 256);
-  ctx.restore();
+  /* Grain is a full-screen 2D fill: cheap-looking, not cheap. On the
+     presentation tier it is skipped entirely -- at projector distance and
+     through a video codec it is invisible, and it costs ~2M pixel writes a
+     frame on hardware that has better things to do. */
+  if (typeof PRESET === 'undefined' || PRESET.grain) {
+    ctx.save();
+    ctx.globalAlpha = 0.5;
+    ctx.translate((hash1(Math.floor(t * 24)) * 128) | 0, (hash1(Math.floor(t * 24) + 7) * 128) | 0);
+    ctx.fillStyle = _grainPattern; ctx.fillRect(-128, -128, w + 256, h + 256);
+    ctx.restore();
+  }
 
   /* scanline breath on the LCD-heavy acts */
   const scan = Math.max(window01(t, 108, 124, 1.5, 1.5), window01(t, 33, 47, 1.5, 1.5)) * 0.5;
@@ -9227,9 +9308,43 @@ const Exporter = {
    and an optional recorder.
    ========================================================================== */
 
+/* --------------------------------------------------------------------------
+   QUALITY PRESETS
+
+   A presentation cannot be a science experiment. The adaptive governor still
+   exists as a safety net, but the film now STARTS at a tier that is known to
+   hold frame rate on modest hardware, and only ever steps DOWN from there. It
+   used to start at ULTRA and take ~2 s of visibly stuttering frames to discover
+   it had to back off, which is the worst possible first impression.
+
+   Override with the URL:
+     ?q=high    prettier  (reflections + shadows + 1.5x DPR) for recording
+     ?q=low     cheapest
+     (default)  presentation: smooth first, detail second
+   -------------------------------------------------------------------------- */
+const PRESETS = {
+  high:         { dpr: 1.5, reflect: true,  shadows: true,  start: 3, grain: true,  beads: 34 },
+  /* The default: what a live demo gets. No mirror pass, NO shadow pass (each is
+     a full extra scene render), grain off, fewer lens beads, and the drawing
+     buffer capped at 720p and scaled up by CSS. On a projector that is
+     indistinguishable and several times cheaper. */
+  presentation: { dpr: 1.0, reflect: false, shadows: false, start: 2, grain: false, beads: 8, maxPx: 1280 * 720 },
+  low:          { dpr: 0.85, reflect: false, shadows: false, start: 1, grain: false, beads: 8 },
+};
+function pickPreset() {
+  try {
+    const q = (window.location && window.location.search || '').toLowerCase();
+    if (/[?&]q=high\b/.test(q)) return 'high';
+    if (/[?&]q=low\b/.test(q)) return 'low';
+  } catch (e) {}
+  return 'presentation';
+}
+const PRESET_NAME = pickPreset();
+const PRESET = PRESETS[PRESET_NAME];
+
 const FILM = {
   t: 0, running: true, speed: 1, hold: 9,
-  frames: 0, fps: 60, msAvg: 8, quality: 3,
+  frames: 0, fps: 60, msAvg: 8, quality: PRESET.start,
   recording: false, recFixed: true,
 };
 
@@ -9547,7 +9662,7 @@ function calibrate(W, t) {
 /* Replaced at build time with the commit and timestamp. Printed on the page so
    "is this the version I just deployed?" is answerable by looking, instead of
    guessing whether the browser or the CDN served a stale copy. */
-const BUILD_ID = '51c7f71 2026-11-05 14:03';
+const BUILD_ID = 'bb1ebaa 2026-11-05 14:13';
 
 /* ========================================================================== */
 /*  BOOT                                                                      */
@@ -9581,14 +9696,15 @@ async function main() {
     }, false);
   }
 
-  /* 2x DPR on a 1080p panel is 4x the pixels for no visible gain in a
-     full-screen film. 1.5 keeps text crisp and costs 44% less. */
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+  /* Resolution follows the preset. 2x DPR on a 1080p panel is 4x the pixels for
+     no visible gain in a full-screen film; the presentation tier renders at 1x
+     device pixels, which is the single largest saving available. */
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, PRESET.dpr));
   renderer.setSize(window.innerWidth, window.innerHeight, false);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.28;
-  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.enabled = !!PRESET.shadows;
   /* PCFSoft filters 9 taps per fragment; PCF filters 4. At 1024 it is
      indistinguishable on a moving, rain-blurred night shot. */
   renderer.shadowMap.type = THREE.PCFShadowMap;
@@ -9691,7 +9807,17 @@ async function main() {
   let ow = 0, oh = 0;
   function resize() {
     const w = window.innerWidth, h = window.innerHeight;
-    const pr = renderer.getPixelRatio();
+    let pr = renderer.getPixelRatio();
+
+    /* Cap total pixels. Shading cost is per-pixel, so this is the single
+       strongest lever available: at the presentation tier we never shade more
+       than ~0.9 MP no matter how large the window is, and the browser scales
+       the result up with CSS for free (the GPU's texture filtering does it). */
+    if (PRESET.maxPx) {
+      const want = w * h * pr * pr;
+      if (want > PRESET.maxPx) pr = Math.max(0.5, pr * Math.sqrt(PRESET.maxPx / want));
+    }
+    renderer.setPixelRatio(pr);
     renderer.setSize(w, h, false);
     /* The overlay is UI: bars, thin rules, small type and one screen of grain.
        At 1.5x DPR that is ~2M pixels of 2D fill per frame for detail no one can
@@ -9757,15 +9883,21 @@ async function main() {
   /* ---- adaptive quality ------------------------------------------------- */
   function adapt(ms) {
     FILM.msAvg = FILM.msAvg * 0.94 + ms * 0.06;
-    if (FILM.frames % 90) return;
+    /* 90 frames (~1.5 s) before the governor even looks was too slow to rescue
+       a bad first impression. Sample every 20 frames. */
+    if (FILM.frames % 20) return;
     const pr = renderer.getPixelRatio();
-    if (FILM.msAvg > 21 && FILM.quality > 0) {
+    /* 21 ms (~48 fps) was far too forgiving: a 30 ms budget reads as lag on a
+       projector. Step down at 15 ms, and never step back up beyond the tier we
+       started in -- climbing mid-presentation is how you get a hitch at the
+       worst moment. */
+    if (FILM.msAvg > 15 && FILM.quality > 0) {
       FILM.quality--;
       if (FILM.quality === 2) { renderer.setPixelRatio(Math.min(1.25, pr)); resize(); }
       else if (FILM.quality === 1) { renderer.setPixelRatio(1); resize(); W.reflector.scale = 0.4; }
       else { W.reflector.enabled = false; }
       HUD.quality = ['ULTRA', 'HIGH', 'BALANCED', 'PERFORMANCE'][3 - FILM.quality] || 'PERFORMANCE';
-    } else if (FILM.msAvg < 11 && FILM.quality < 3) {
+    } else if (FILM.msAvg < 9 && FILM.quality < Math.min(3, PRESET.start)) {
       FILM.quality++;
       if (FILM.quality === 1) { W.reflector.enabled = true; }
       else if (FILM.quality === 2) { W.reflector.scale = 0.6; renderer.setPixelRatio(1.25); resize(); }
@@ -9862,7 +9994,11 @@ async function main() {
        is more pixels than the main pass. 0.35 still reads as a wet road because
        the reflection is blurred by the ripple normals. */
     W.reflector.scale = 0.35;
-    const wantRefl = W.reflector.enabled && S.reflAmt > 0.02 && S.closeToGround > 0.05;
+    /* The mirror is a SECOND full scene render. On the presentation tier it is
+       off entirely: the wet road still reads wet from the specular response and
+       the ripple normals, and this is the second-largest saving after DPR. */
+    const wantRefl = PRESET.reflect && W.reflector.enabled
+      && S.reflAmt > 0.02 && S.closeToGround > 0.05;
     if (wantRefl) W.reflector.render(scene, camera, noReflect);
     U.reflAmt.value = wantRefl ? clamp01(S.reflAmt) : 0;
 
@@ -9877,7 +10013,7 @@ async function main() {
         const sz = renderer.getSize(new THREE.Vector2());
         const calls = (renderer.info && renderer.info.render) ? renderer.info.render.calls : -1;
         dEl.textContent =
-          't ' + t.toFixed(2) + ' / ' + DURATION + ' s    ' + Math.round(HUD.fps) + ' fps    ' + HUD.quality +
+          't ' + t.toFixed(2) + ' / ' + DURATION + ' s    ' + Math.round(HUD.fps) + ' fps    ' + HUD.quality + ' (' + PRESET_NAME + ')' +
           '\ncanvas ' + Math.round(sz.x) + 'x' + Math.round(sz.y) + '    dpr ' + renderer.getPixelRatio().toFixed(2) +
           '\ncalls ' + calls + '    far ' + Math.round(camera.far) + '    frames ' + FILM.frames +
           '\n' + GLVER + '    build ' + BUILD_ID;
