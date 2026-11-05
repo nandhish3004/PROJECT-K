@@ -687,6 +687,58 @@ async function main() {
     adapt(realDt * 1000);
   }
 
+  /* ---- deterministic download -------------------------------------------- */
+  const dlBtn = document.getElementById('dl');
+  const dlBar = document.getElementById('dlbar');
+  if (dlBtn) {
+    if (!Exporter.supported()) {
+      dlBtn.disabled = true;
+      dlBtn.textContent = 'Download unavailable \u00b7 use Chrome or Edge';
+      dlBtn.title = 'Export needs WebCodecs, which this browser lacks: ' + Exporter.whyUnsupported();
+    }
+    dlBtn.addEventListener('click', async (ev) => {
+      ev.stopPropagation();
+      if (Exporter.running) { Exporter.cancelled = true; return; }
+      if (!HUD.audioReady) { try { await unlockAudio(); } catch (e) {} }
+
+      const wasRecording = FILM.recording;
+      FILM.recording = true;              /* freezes the live loop's clock */
+      dlBtn.classList.add('busy');
+      dlBtn.textContent = 'Rendering\u2026';
+      const setPct = (p) => { if (dlBar) dlBar.style.width = Math.round(p * 100) + '%'; };
+      setPct(0);
+
+      try {
+        const blob = await Exporter.render({
+          renderer, scene, camera, W,
+          duration: DURATION, fps: 60,
+          stateAt, drive, sampleCamera,
+          drawHUD, octx, ow, oh,
+          audio: { manifest: AUDIO_MANIFEST, cues: CUES, duration: DURATION },
+          onProgress: (done, total) => setPct(total ? done / total : 0),
+        });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'chennai-mobility-ai-1080p.webm';
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+        dlBtn.textContent = '\u2713 Saved \u00b7 download again';
+      } catch (err) {
+        const msg = String((err && err.message) || err);
+        dlBtn.textContent = msg === 'Export cancelled.' ? 'Cancelled \u00b7 try again' : 'Failed \u00b7 try again';
+        if (window.console) console.error('[export]', err);
+      } finally {
+        FILM.recording = wasRecording;
+        dlBtn.classList.remove('busy');
+        setPct(0);
+        /* the export resized the renderer; put the live view back */
+        resize();
+        FILM.t = 0; cueIdx = 0;
+        AudioEngine.stopAll(); AudioEngine.sync(0);
+      }
+    });
+  }
+
   /* ---- go ---------------------------------------------------------------- */
   const boot = document.getElementById('boot');
   if (boot) boot.remove();

@@ -47,6 +47,7 @@ ORDER = [
     "32-people.js",
     "40-cinematics.js",
     "50-hud.js",
+    "60-export.js",
     "90-main.js",
 ]
 
@@ -132,6 +133,19 @@ def main() -> int:
         pass
     stamp += " " + datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
 
+    mux_token = "/*__WEBM_MUXER__*/"
+    if mux_token not in bundle:
+        print(f"  ! placeholder {mux_token} not found in the source bundle", file=sys.stderr)
+        return 1
+    mux_path = ROOT / "node_modules" / "webm-muxer" / "build" / "webm-muxer.js"
+    if not mux_path.exists():
+        print(f"  ! {mux_path} is missing; run: npm i --no-save webm-muxer", file=sys.stderr)
+        return 1
+    mux_src = mux_path.read_text(encoding="utf-8")
+    # the source is inserted as a statement, so a trailing newline keeps the next
+    # line of our bundle from being glued onto its last line
+    bundle = bundle.replace(mux_token, mux_src.rstrip("\n") + "\n", 1)
+
     token = "/*__BUILD_ID__*/dev"
     if token not in bundle:
         print(f"  ! placeholder {token} not found in the source bundle", file=sys.stderr)
@@ -141,7 +155,7 @@ def main() -> int:
     html = html.replace("/*__THREE__*/", three, 1)
     html = html.replace("/*__SRC__*/", bundle, 1)
 
-    for left in ("__AUDIO_MANIFEST__", "__BUILD_ID__", "/*__SRC__*/", "/*__THREE__*/"):
+    for left in ("__AUDIO_MANIFEST__", "__BUILD_ID__", "__WEBM_MUXER__", "/*__SRC__*/", "/*__THREE__*/"):
         if left in html:
             print(f"  ! placeholder {left} survived substitution", file=sys.stderr)
             return 1

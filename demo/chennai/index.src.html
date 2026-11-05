@@ -43,7 +43,19 @@
     text-shadow:0 1px 3px #000,0 0 12px rgba(0,0,0,.9);
     background:rgba(6,10,16,.55);border-left:2px solid var(--sodium);
     padding:7px 11px;border-radius:0 3px 3px 0;white-space:pre}
-  #rec{right:18px;bottom:44px;appearance:none;border:1px solid rgba(185,28,28,.55);
+  /* ---- download: the primary action, so it gets real presence ---- */
+  #dl{right:18px;bottom:44px;appearance:none;border:1px solid rgba(132,204,22,.55);
+    background:rgba(10,20,12,.72);color:#D9F99D;font-family:var(--mono);font-size:11px;
+    font-weight:700;letter-spacing:.12em;padding:9px 15px;border-radius:3px;cursor:pointer;
+    backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);transition:.18s;
+    text-transform:uppercase}
+  #dl:hover{border-color:#84CC16;color:#fff;background:rgba(24,40,16,.9)}
+  #dl[disabled]{opacity:.5;cursor:default}
+  #dl.busy{border-color:#F59E0B;color:#FDE68A;background:rgba(40,30,10,.85)}
+  #dlbar{position:fixed;left:0;bottom:0;height:2px;width:0%;z-index:7;
+    background:linear-gradient(90deg,var(--route),var(--lcd));transition:width .2s}
+  #rec{display:none}
+  #rec_old{right:18px;bottom:44px;appearance:none;border:1px solid rgba(185,28,28,.55);
     background:rgba(10,14,20,.62);color:#F3D3D3;font-family:var(--mono);font-size:10px;
     font-weight:700;letter-spacing:.14em;padding:8px 13px;border-radius:3px;cursor:pointer;
     backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);transition:.18s;text-transform:uppercase}
@@ -108,6 +120,9 @@
 <button id="rec" class="ui" type="button" title="Export a 1080p WebM of the full 150-second timeline (R)">&#9679; Record 1080p</button>
 
 <div id="diag"></div>
+<div id="dlbar"></div>
+
+<button id="dl" class="ui" type="button">&#11015; Download video (1080p)</button>
 
 <div id="fatal" hidden></div>
 
